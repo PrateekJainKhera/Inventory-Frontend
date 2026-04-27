@@ -11,7 +11,7 @@ const modalSizes = {
   md: 'max-w-lg w-full mx-4 h-auto',
   lg: 'max-w-2xl w-full mx-4 h-auto',
   xl: 'max-w-4xl w-full mx-4 h-auto',
-  master: 'w-[90vw] h-[90vh] max-w-none', // Standard for master pages
+  master: 'w-[95vw] h-[96vh] max-w-none', // Standard for master pages
   fullscreen: 'w-[98vw] h-[98vh] max-w-none' // 98% fullscreen
 }
 

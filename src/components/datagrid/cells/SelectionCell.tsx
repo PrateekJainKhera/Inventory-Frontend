@@ -56,12 +56,12 @@ export function SelectionCell({
           ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
           ${
             checked
-              ? 'border-primary bg-white'
+              ? 'border-slate-700 bg-white'
               : 'border-gray-300 bg-white hover:border-gray-400'
           }
         `}
         style={{
-          boxShadow: checked ? '0 0 0 2px rgba(59, 130, 246, 0.1)' : 'none',
+          boxShadow: checked ? '0 0 0 2px rgba(30, 41, 59, 0.15)' : 'none',
           width: '14px',
           height: '14px',
           minWidth: '14px',
@@ -70,7 +70,7 @@ export function SelectionCell({
       >
         {/* Inner filled circle for radio */}
         {checked && (
-          <div className="w-2 h-2 rounded-full bg-primary transition-all duration-150" />
+          <div className="w-2 h-2 rounded-full bg-slate-700 transition-all duration-150" />
         )}
       </div>
     )
@@ -86,12 +86,12 @@ export function SelectionCell({
         ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
         ${
           checked || indeterminate
-            ? 'border-primary bg-primary'
+            ? 'border-slate-700 bg-slate-700'
             : 'border-gray-300 bg-white hover:border-gray-400'
         }
       `}
       style={{
-        boxShadow: checked || indeterminate ? '0 0 0 2px rgba(59, 130, 246, 0.1)' : 'none',
+        boxShadow: checked || indeterminate ? '0 0 0 2px rgba(30, 41, 59, 0.15)' : 'none',
         width: '14px',
         height: '14px',
         minWidth: '14px',

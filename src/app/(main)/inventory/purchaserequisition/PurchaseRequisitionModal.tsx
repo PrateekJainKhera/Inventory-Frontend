@@ -598,7 +598,7 @@ export function PurchaseRequisitionModal({
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent
-          className="w-[95vw] h-[92vh] max-w-none bg-[rgb(var(--bg-surface))] p-0 flex flex-col overflow-hidden"
+          className="w-[95vw] h-[99vh] max-h-none max-w-none bg-[rgb(var(--bg-surface))] p-0 flex flex-col overflow-hidden"
           hideCloseButton
           disableOutsideClick
           aria-describedby="preq-modal-desc"
