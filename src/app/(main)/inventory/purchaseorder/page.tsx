@@ -9,10 +9,11 @@ import { Badge } from '@/components/ui'
 import { DataGrid } from '@/components/datagrid'
 import { cn, formatDate } from '@/lib/utils'
 import {
-  MOCK_PENDING_REQUISITIONS,
+  derivePendingRequisitions,
   MOCK_PURCHASE_ORDERS,
   type PurchaseOrderItem,
 } from '@/data/mock/purchaseOrder'
+import { markRequisitionsAsPOCreated } from '@/data/mock/purchaseRequisition'
 import PurchaseOrderModal from './PurchaseOrderModal'
 
 type ViewMode = 'requisitions' | 'orders'
@@ -22,7 +23,7 @@ function PurchaseOrderContent() {
   const alerts = useGlobalAlert()
 
   const [viewMode, setViewMode] = useState<ViewMode>('requisitions')
-  const [requisitions] = useState<PurchaseOrderItem[]>([...MOCK_PENDING_REQUISITIONS])
+  const [requisitions, setRequisitions] = useState<PurchaseOrderItem[]>(() => derivePendingRequisitions())
   const [orders, setOrders] = useState<PurchaseOrderItem[]>([...MOCK_PURCHASE_ORDERS])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [selectedRequisitionIds, setSelectedRequisitionIds] = useState<Set<number>>(new Set())
@@ -105,8 +106,13 @@ function PurchaseOrderContent() {
   }, [])
 
   const handleModalSuccess = useCallback(() => {
-    alerts.showSuccess('Success', 'Operation completed successfully')
-  }, [alerts])
+    if (viewMode === 'requisitions' && selectedRequisitionIds.size > 0) {
+      markRequisitionsAsPOCreated([...selectedRequisitionIds])
+      setRequisitions(derivePendingRequisitions())
+      setSelectedRequisitionIds(new Set())
+    }
+    alerts.showSuccess('Success', 'Purchase Order created successfully')
+  }, [alerts, viewMode, selectedRequisitionIds])
 
   // ── Pending Requisitions columns ───────────────────────────────────────────
   const requisitionColumns = useMemo((): ColumnDef<PurchaseOrderItem>[] => [

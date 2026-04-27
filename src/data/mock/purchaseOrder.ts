@@ -140,7 +140,43 @@ export interface HSNItem {
   IGSTTaxPercentage: number
 }
 
+// ─── Derived: Pending Requisitions from approved PRs ─────────────────────────
+
+import { getApprovedPendingRequisitions } from './purchaseRequisition'
+
+export function derivePendingRequisitions(): PurchaseOrderItem[] {
+  return getApprovedPendingRequisitions().map(r => ({
+    TransactionID: r.TransactionID,
+    VoucherNo: r.VoucherNo,
+    VoucherDate: r.VoucherDate,
+    LedgerName: '',
+    PurchaseDivision: 'DIV001',
+    ItemID: r.ItemID,
+    ItemCode: r.ItemCode,
+    ItemGroupName: r.ItemGroupName,
+    ItemSubGroupName: r.ItemSubGroupName,
+    ItemName: r.ItemName,
+    RefJobCardContentNo: r.RefJobCardContentNo,
+    ItemNarration: r.ItemNarration,
+    RequiredQuantity: r.PurchaseQty,
+    PurchaseQuantityComp: r.PurchaseQty,
+    PurchaseQuantity: 0,
+    PurchaseUnit: r.OrderUnit,
+    StockUnit: r.StockUnit,
+    CreatedBy: r.CreatedBy,
+    Narration: r.Narration,
+    ProductionUnitName: r.ProductionUnitName,
+    CompanyName: 'Indas Analytics',
+    BasicAmount: 0, TaxableAmount: 0, TotalTaxAmount: 0, TotalOverheadAmount: 0, NetAmount: 0,
+    DeliveryAddress: '', ModeOfTransport: '', TermsOfPayment: '',
+    VoucherItemApproved: false, VoucherCancelled: false,
+    PurchaseReference: '', CancelRemark: '', CurrencyCode: 'INR',
+    ApprovedBy: r.ApprovedBy,
+  }))
+}
+
 // ─── Mock: Pending Requisitions (approved, POCreated = false) ─────────────────
+// Kept for reference — use derivePendingRequisitions() in components
 
 export const MOCK_PENDING_REQUISITIONS: PurchaseOrderItem[] = [
   {

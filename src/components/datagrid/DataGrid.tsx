@@ -763,7 +763,13 @@ export function DataGrid<TData>({
 
   // Custom filter function for advanced filters
   const advancedFilterFn = React.useCallback((row: any, columnId: string, filterValue: any) => {
-    if (!filterValue || typeof filterValue !== 'object') return true
+    if (!filterValue) return true
+    // Plain string from inline FilterRow — treat as case-insensitive contains
+    if (typeof filterValue === 'string') {
+      const cellString = String(row.getValue(columnId) ?? '')
+      return cellString.toLowerCase().includes(filterValue.toLowerCase())
+    }
+    if (typeof filterValue !== 'object') return true
 
     const { operator, value, type } = filterValue
     const cellValue = row.getValue(columnId)

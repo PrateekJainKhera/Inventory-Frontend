@@ -348,11 +348,30 @@ export default function PurchaseOrderModal({
       accessorKey: 'PurchaseQuantity',
       header: 'P.O.Qty(P.U.)',
       size: 90,
-      cell: ({ row }) => !isReadOnly ? (
-        <input type="number" value={row.original.PurchaseQuantity ?? ''} min={0}
-          onChange={e => updateItem(row.index, { PurchaseQuantity: parseFloat(e.target.value) || 0 })}
-          className="w-full px-1.5 py-0.5 text-xs border rounded text-right bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))]" />
-      ) : <span className="text-xs">{Number(row.original.PurchaseQuantity ?? 0).toFixed(2)}</span>,
+      cell: ({ row }) => {
+        const maxQty = row.original.PurchaseQuantityComp
+        return !isReadOnly ? (
+          <div>
+            <input
+              type="number"
+              value={row.original.PurchaseQuantity ?? ''}
+              min={0}
+              max={maxQty}
+              onChange={e => {
+                const val = parseFloat(e.target.value) || 0
+                const capped = maxQty != null ? Math.min(val, maxQty) : val
+                updateItem(row.index, { PurchaseQuantity: capped })
+              }}
+              className={`w-full px-1.5 py-0.5 text-xs border rounded text-right bg-[rgb(var(--bg-surface))] ${
+                maxQty != null && (row.original.PurchaseQuantity ?? 0) > maxQty
+                  ? 'border-red-500'
+                  : 'border-[rgb(var(--bd-default))]'
+              }`}
+            />
+            {maxQty != null && <div className="text-[10px] text-[rgb(var(--fg-muted))] text-right">max {maxQty}</div>}
+          </div>
+        ) : <span className="text-xs">{Number(row.original.PurchaseQuantity ?? 0).toFixed(2)}</span>
+      },
     },
     {
       accessorKey: 'PurchaseRate',

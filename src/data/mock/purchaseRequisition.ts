@@ -298,6 +298,42 @@ export let MOCK_REQUISITIONS: RequisitionRecord[] = [
     AuditApproved: false, IsAuditCancelled: false, IsVoucherItemApproved: false,
     IsCancelled: false, POCreated: false, ManuallyClosed: false,
   },
+  {
+    TransactionID: 2007, VoucherNo: 'PREQ-007', VoucherDate: '2026-04-17',
+    ItemID: 2, ItemCode: 'REL-002', ItemGroupName: 'Paper', ItemSubGroupName: 'Kraft Paper',
+    ItemName: 'Kraft Paper 90 GSM – 75cm Reel',
+    RefJobCardContentNo: 'JC-2024-002', JobName: 'Shipper Box Run',
+    PurchaseQty: 300, StockUnit: 'KG', OrderUnit: 'KG', POQtyInStockUnit: 300,
+    PhysicalStock: 90, AllocatedStock: 30, ExpectedDeliveryDate: '2026-05-10',
+    ItemNarration: '', Narration: '',
+    CreatedBy: 'Priya Sharma', ApprovedBy: 'Suresh Nair', ProductionUnitName: 'Unit B – Packaging',
+    AuditApproved: true, IsAuditCancelled: false, IsVoucherItemApproved: true,
+    IsCancelled: false, POCreated: false, ManuallyClosed: false,
+  },
+  {
+    TransactionID: 2008, VoucherNo: 'PREQ-008', VoucherDate: '2026-04-18',
+    ItemID: 14, ItemCode: 'LAM-002', ItemGroupName: 'Lamination', ItemSubGroupName: 'Thermal Film',
+    ItemName: 'Matte Thermal Lamination Film – 25 Micron',
+    RefJobCardContentNo: '', JobName: '',
+    PurchaseQty: 80, StockUnit: 'KG', OrderUnit: 'KG', POQtyInStockUnit: 80,
+    PhysicalStock: 25, AllocatedStock: 10, ExpectedDeliveryDate: '2026-05-15',
+    ItemNarration: '', Narration: 'Regular stock order',
+    CreatedBy: 'Amit Desai', ApprovedBy: 'Suresh Nair', ProductionUnitName: 'Unit C – Lamination',
+    AuditApproved: true, IsAuditCancelled: false, IsVoucherItemApproved: true,
+    IsCancelled: false, POCreated: false, ManuallyClosed: false,
+  },
+  {
+    TransactionID: 2009, VoucherNo: 'PREQ-009', VoucherDate: '2026-04-19',
+    ItemID: 1, ItemCode: 'REL-001', ItemGroupName: 'Paper', ItemSubGroupName: 'Art Paper',
+    ItemName: 'Art Paper 80 GSM – 100cm Reel',
+    RefJobCardContentNo: 'JC-2024-003', JobName: 'Cosmetics Label Run',
+    PurchaseQty: 250, StockUnit: 'KG', OrderUnit: 'KG', POQtyInStockUnit: 250,
+    PhysicalStock: 200, AllocatedStock: 80, ExpectedDeliveryDate: '2026-05-20',
+    ItemNarration: 'Same spec as last order', Narration: '',
+    CreatedBy: 'Ravi Kumar', ApprovedBy: 'Suresh Nair', ProductionUnitName: 'Unit A – Printing',
+    AuditApproved: true, IsAuditCancelled: false, IsVoucherItemApproved: true,
+    IsCancelled: false, POCreated: false, ManuallyClosed: false,
+  },
 ]
 
 // ─── Mock Item Master (for Add Item modal) ────────────────────────────────────
@@ -353,8 +389,31 @@ export function getRequisitionStatus(r: RequisitionRecord): RequisitionStatus {
 
 // ─── Voucher Number Generator ─────────────────────────────────────────────────
 
-let nextReqId = 7
+let nextReqId = 10
 
 export function generateReqNo(): string {
   return `PREQ-00${nextReqId++}`
+}
+
+// ─── PR → PO Helpers ──────────────────────────────────────────────────────────
+
+// Returns approved requisitions that are not yet converted to PO
+export function getApprovedPendingRequisitions(): RequisitionRecord[] {
+  return MOCK_REQUISITIONS.filter(
+    r =>
+      r.AuditApproved &&
+      r.IsVoucherItemApproved &&
+      !r.POCreated &&
+      !r.ManuallyClosed &&
+      !r.IsCancelled &&
+      !r.IsAuditCancelled
+  )
+}
+
+// Marks requisition records as POCreated = true after a PO is saved
+export function markRequisitionsAsPOCreated(transactionIds: number[]): void {
+  transactionIds.forEach(id => {
+    const rec = MOCK_REQUISITIONS.find(r => r.TransactionID === id)
+    if (rec) rec.POCreated = true
+  })
 }
