@@ -51,9 +51,8 @@ function LedgerMasterPageContent() {
       showEdit: true,
       showDelete: true,
       showDuplicate: true,
-      mode: 'mixed',
-      primaryActions: ['view', 'edit', 'delete'],
-      maxVisibleActions: 3,
+      mode: 'buttons',
+      primaryActions: ['view', 'edit', 'duplicate', 'delete'],
       confirmDelete: true,
       deleteConfirmation: {
         title: 'Delete Ledger',
@@ -151,13 +150,8 @@ function LedgerMasterPageContent() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="py-3 px-4 bg-[rgb(var(--bg-default))] min-h-screen"
+      className="h-full flex flex-col overflow-hidden py-3 px-4 bg-[rgb(var(--bg-default))]"
     >
-      {/* Page Title */}
-      <div className="text-center mb-1 px-3">
-        <h1 className="text-xl font-bold text-[rgb(var(--fg-default))]">Ledger Master</h1>
-      </div>
-
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-end gap-3 mb-3 px-3">
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
@@ -182,6 +176,7 @@ function LedgerMasterPageContent() {
 
       {/* DataGrid */}
       <DataGrid
+        className="flex-1 min-h-0"
         data={selectedMaster ? gridData : []}
         columns={selectedMaster ? dynamicColumns : []}
         onRowClick={handleEdit}

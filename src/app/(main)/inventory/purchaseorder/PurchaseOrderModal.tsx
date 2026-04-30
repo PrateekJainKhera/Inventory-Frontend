@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
-import { X, Plus, Trash2, Calendar, Save, Printer, XCircle, MapPin, RotateCcw, FileText } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { X, Plus, Calendar, Save, Printer, XCircle, MapPin, RotateCcw, FileText } from 'lucide-react'
 import { ColumnDef } from '@tanstack/react-table'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -25,7 +25,6 @@ import {
   PO_CONTACT_PERSONS,
   PO_TRANSPORT_MODES,
   PO_CURRENCIES,
-  PO_DIVISIONS,
   PO_PAYMENT_TERMS_OPTIONS,
   PO_CHARGE_LEDGERS,
   PO_DELIVERY_ADDRESSES,
@@ -42,7 +41,8 @@ interface Props {
 }
 
 const TODAY = new Date()
-const genId = () => Date.now() + Math.random()
+let _idSeq = 0
+const genId = () => ++_idSeq
 const genPONo = () => `PO-${Date.now().toString().slice(-6)}`
 
 export default function PurchaseOrderModal({
@@ -73,9 +73,12 @@ export default function PurchaseOrderModal({
     purchaseReference: '',
   })
   const [items, setItems] = useState<PurchaseOrderDetailItem[]>([])
+  const itemsRef = useRef<PurchaseOrderDetailItem[]>([])
+  useEffect(() => { itemsRef.current = items }, [items])
   const [paymentTerms, setPaymentTerms] = useState<PaymentTermsItem[]>([])
   const [paymentTermInput, setPaymentTermInput] = useState('')
   const [additionalCharges, setAdditionalCharges] = useState<AdditionalChargesItem[]>([])
+  const [selectedChargeIds, setSelectedChargeIds] = useState<Set<number>>(new Set())
   const [chargesLedger, setChargesLedger] = useState('')
   const [deliverySchedules, setDeliverySchedules] = useState<DeliveryScheduleItem[]>([])
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
@@ -185,48 +188,113 @@ export default function PurchaseOrderModal({
         })
       }
     })
-    setItems(Array.from(map.values()))
+    setItems(Array.from(map.values()).map(item => recalcItem(item, 'none')))
   }, [isOpen, selectedRequisitions, mode])
+
+  // ── Auto-fill Additional Charges based on supplier state ──────────────────
+  useEffect(() => {
+    if (isReadOnly) return
+    if (!formData.supplierName) {
+      setAdditionalCharges([])
+      setSelectedChargeIds(new Set())
+      return
+    }
+    const cur = itemsRef.current
+    const cgstAmt = parseFloat(cur.reduce((s, i) => s + (i.CGSTAmt ?? 0), 0).toFixed(2))
+    const sgstAmt = parseFloat(cur.reduce((s, i) => s + (i.SGSTAmt ?? 0), 0).toFixed(2))
+    const igstAmt = parseFloat(cur.reduce((s, i) => s + (i.IGSTAmt ?? 0), 0).toFixed(2))
+    const supplier = PO_SUPPLIERS.find(s => s.value === formData.supplierName)
+    const isIntrastate = supplier?.gstType !== 'interstate'
+    const rows: AdditionalChargesItem[] = isIntrastate
+      ? [
+          { id: genId(), LedgerID: 1, LedgerName: 'CGST',    Percentage: 0, CalculateOn: 'Basic', GSTApplicable: true,  InAmountChecked: false, InAmount: 0, Amount: cgstAmt, TaxType: 'GST' },
+          { id: genId(), LedgerID: 2, LedgerName: 'SGST',    Percentage: 0, CalculateOn: 'Basic', GSTApplicable: true,  InAmountChecked: false, InAmount: 0, Amount: sgstAmt, TaxType: 'GST' },
+          { id: genId(), LedgerID: 4, LedgerName: 'Freight', Percentage: 0, CalculateOn: 'Basic', GSTApplicable: false, InAmountChecked: false, InAmount: 0, Amount: 0,       TaxType: '' },
+        ]
+      : [
+          { id: genId(), LedgerID: 3, LedgerName: 'IGST',    Percentage: 0, CalculateOn: 'Basic', GSTApplicable: true,  InAmountChecked: false, InAmount: 0, Amount: igstAmt, TaxType: 'GST' },
+          { id: genId(), LedgerID: 4, LedgerName: 'Freight', Percentage: 0, CalculateOn: 'Basic', GSTApplicable: false, InAmountChecked: false, InAmount: 0, Amount: 0,       TaxType: '' },
+        ]
+    setAdditionalCharges(rows)
+    setSelectedChargeIds(new Set())
+  }, [formData.supplierName, isReadOnly])
+
+  // ── Sync GST charge amounts from item totals ───────────────────────────────
+  useEffect(() => {
+    setAdditionalCharges(prev => prev.map(charge => {
+      const name = charge.LedgerName.toLowerCase()
+      if (name === 'cgst') return { ...charge, Amount: parseFloat(items.reduce((s, i) => s + (i.CGSTAmt ?? 0), 0).toFixed(2)) }
+      if (name === 'sgst') return { ...charge, Amount: parseFloat(items.reduce((s, i) => s + (i.SGSTAmt ?? 0), 0).toFixed(2)) }
+      if (name === 'igst') return { ...charge, Amount: parseFloat(items.reduce((s, i) => s + (i.IGSTAmt ?? 0), 0).toFixed(2)) }
+      return charge
+    }))
+  }, [items])
 
   // ── Amount calculations ────────────────────────────────────────────────────
   const amounts = useMemo(() => {
-    const basicAmt = items.reduce((s, i) => s + (i.BasicAmount ?? 0), 0)
-    const gstAmt   = items.reduce((s, i) => s + (i.CGSTAmt ?? 0) + (i.SGSTAmt ?? 0) + (i.IGSTAmt ?? 0), 0)
-    const otherAmt = additionalCharges.reduce((s, c) => s + (c.Amount ?? 0), 0)
+    const basicAmt    = items.reduce((s, i) => s + (i.BasicAmount  ?? 0), 0)
+    const afterDiscAmt = items.reduce((s, i) => s + (i.AfterDisAmt ?? 0), 0)
+    const discAmt     = basicAmt - afterDiscAmt
+    // GST from item grid (already computed on AfterDisAmt inside recalcItem)
+    const itemGST = items.reduce((s, i) => s + (i.CGSTAmt ?? 0) + (i.SGSTAmt ?? 0) + (i.IGSTAmt ?? 0), 0)
+    // Only SELECTED additional charges contribute to the summary
+    const activeCharges = additionalCharges.filter(c => selectedChargeIds.has(c.id))
+    const isGSTLedger = (name: string) => /cgst|sgst|igst/i.test(name)
+    const chargeGST = activeCharges.filter(c => isGSTLedger(c.LedgerName)).reduce((s, c) => s + (c.Amount ?? 0), 0)
+    const otherTax  = activeCharges.filter(c => !isGSTLedger(c.LedgerName)).reduce((s, c) => s + (c.Amount ?? 0), 0)
+    const gstAmt   = itemGST + chargeGST
+    const totalTax = gstAmt + otherTax
     return {
-      basicAmt: basicAmt.toFixed(2),
-      gstAmt:   gstAmt.toFixed(2),
-      otherAmt: otherAmt.toFixed(2),
-      netAmt:   (basicAmt + gstAmt + otherAmt).toFixed(2),
+      basicAmt:     basicAmt.toFixed(2),
+      discAmt:      discAmt.toFixed(2),
+      afterDiscAmt: afterDiscAmt.toFixed(2),
+      gstAmt:       gstAmt.toFixed(2),
+      otherTax:     otherTax.toFixed(2),
+      totalTax:     totalTax.toFixed(2),
+      grossAmt:     (afterDiscAmt + totalTax).toFixed(2),
     }
-  }, [items, additionalCharges])
+  }, [items, additionalCharges, selectedChargeIds])
+
+  // ── Supplier GST type ──────────────────────────────────────────────────────
+  const supplierGstType = useMemo(() => {
+    if (!formData.supplierName) return 'none' as const
+    return PO_SUPPLIERS.find(s => s.value === formData.supplierName)?.gstType ?? ('intrastate' as const)
+  }, [formData.supplierName])
 
   // ── Item updater with auto-calculations ───────────────────────────────────
-  const recalcItem = (item: PurchaseOrderDetailItem): PurchaseOrderDetailItem => {
+  // none:        no supplier selected → all GST = 0
+  // intrastate:  same state → CGST + SGST only (IGST = 0)
+  // interstate:  out of state → IGST only (CGST = SGST = 0)
+  const recalcItem = (item: PurchaseOrderDetailItem, gstType: 'intrastate' | 'interstate' | 'none' = 'none'): PurchaseOrderDetailItem => {
     const qty  = item.PurchaseQuantity ?? 0
     const rate = item.PurchaseRate ?? 0
     const disc = item.Disc ?? 0
     const basic = qty * rate
     const afterDis = basic * (1 - disc / 100)
     const taxable = afterDis
-    const cgst = taxable * ((item.CGSTTaxPercentage ?? 0) / 100)
-    const sgst = taxable * ((item.SGSTTaxPercentage ?? 0) / 100)
-    const igst = taxable * ((item.IGSTTaxPercentage ?? 0) / 100)
-    return { ...item, BasicAmount: basic, AfterDisAmt: afterDis, TaxableAmount: taxable, CGSTAmt: cgst, SGSTAmt: sgst, IGSTAmt: igst, TotalAmount: taxable + cgst + sgst + igst }
+    const cgst = gstType === 'intrastate' ? taxable * ((item.CGSTTaxPercentage ?? 0) / 100) : 0
+    const sgst = gstType === 'intrastate' ? taxable * ((item.SGSTTaxPercentage ?? 0) / 100) : 0
+    const igst = gstType === 'interstate' ? taxable * ((item.IGSTTaxPercentage ?? 0) / 100) : 0
+    const qtyInSU = qty * (item.ConversionFactor ?? 1)
+    return { ...item, BasicAmount: basic, AfterDisAmt: afterDis, TaxableAmount: taxable, CGSTAmt: cgst, SGSTAmt: sgst, IGSTAmt: igst, TotalAmount: taxable + cgst + sgst + igst, PurchaseQuantityInStockUnit: qtyInSU }
   }
 
   const updateItem = useCallback((idx: number, patch: Partial<PurchaseOrderDetailItem>) => {
     setItems(prev => {
       const next = [...prev]
       const merged = { ...next[idx], ...patch }
-      // Recalc packs → qty
       if ('RequiredNoOfPacks' in patch || 'QuantityPerPack' in patch) {
         merged.PurchaseQuantity = (merged.RequiredNoOfPacks ?? 0) * (merged.QuantityPerPack ?? 0)
       }
-      next[idx] = recalcItem(merged)
+      next[idx] = recalcItem(merged, supplierGstType)
       return next
     })
-  }, [])
+  }, [supplierGstType])
+
+  // Re-recalculate all items when supplier state changes
+  useEffect(() => {
+    setItems(prev => prev.map(item => recalcItem(item, supplierGstType)))
+  }, [supplierGstType])
 
   const deleteItem = useCallback((idx: number) => {
     setItems(prev => prev.filter((_, i) => i !== idx))
@@ -240,16 +308,38 @@ export default function PurchaseOrderModal({
   }
 
   // ── Additional charges ─────────────────────────────────────────────────────
+  const handleChargeRowSelect = useCallback((rows: AdditionalChargesItem[]) => {
+    const ids = rows.map(r => r.id)
+    setSelectedChargeIds(prev => {
+      if (prev.size === ids.length && ids.every(id => prev.has(id))) return prev
+      return new Set(ids)
+    })
+  }, [])
+
   const handleAddCharge = () => {
     if (!chargesLedger) { alerts.showError('Validation', 'Please select a ledger'); return }
     const ledgerLabel = PO_CHARGE_LEDGERS.find(l => l.value === chargesLedger)?.label ?? ''
     setAdditionalCharges(prev => [...prev, {
       id: genId(), LedgerID: Number(chargesLedger), LedgerName: ledgerLabel,
-      Percentage: 0, CalculateOn: 'Basic', GSTApplicable: true,
-      InAmountChecked: false, InAmount: 0, Amount: 0, TaxType: 'Charges',
+      Percentage: 0, CalculateOn: 'Basic', GSTApplicable: false,
+      InAmountChecked: false, InAmount: 0, Amount: 0, TaxType: '',
     }])
     setChargesLedger('')
   }
+
+  const updateCharge = useCallback((idx: number, patch: Partial<AdditionalChargesItem>) => {
+    setAdditionalCharges(prev => {
+      const next = [...prev]
+      const merged = { ...next[idx], ...patch }
+      // Auto-calc Amount from % when not in manual (InAmountChecked) mode
+      if (!merged.InAmountChecked) {
+        const basicAmt = items.reduce((s, i) => s + (i.BasicAmount ?? 0), 0)
+        merged.Amount = parseFloat((basicAmt * (merged.Percentage ?? 0) / 100).toFixed(2))
+      }
+      next[idx] = merged
+      return next
+    })
+  }, [items])
 
   // ── Delivery schedule ──────────────────────────────────────────────────────
   const handleAddSchedule = () => {
@@ -277,7 +367,7 @@ export default function PurchaseOrderModal({
         CGSTTaxPercentage: hsn.CGSTTaxPercentage,
         SGSTTaxPercentage: hsn.SGSTTaxPercentage,
         IGSTTaxPercentage: hsn.IGSTTaxPercentage,
-      })
+      }, supplierGstType)
       return next
     })
     setHsnOpen(false)
@@ -319,11 +409,11 @@ export default function PurchaseOrderModal({
 
   // ── Item grid columns ──────────────────────────────────────────────────────
   const itemColumns = useMemo((): ColumnDef<PurchaseOrderDetailItem>[] => [
-    { accessorKey: 'ItemGroupName',   header: 'Group Name',   size: 110, cell: ({ getValue }) => <span className="text-xs">{getValue() as string}</span> },
     { accessorKey: 'ItemCode',        header: 'Item Code',    size: 80,  cell: ({ getValue }) => <span className="text-xs">{getValue() as string}</span> },
     { accessorKey: 'ItemName',        header: 'Item Name',    size: 200, cell: ({ getValue }) => <span className="text-xs">{getValue() as string}</span> },
     { accessorKey: 'RequiredQuantity',header: 'Req.Qty(S.U.)',size: 80,  cell: ({ getValue }) => <span className="text-xs">{Number(getValue() ?? 0).toFixed(2)}</span> },
     { accessorKey: 'StockUnit',       header: 'Stock Unit',   size: 70,  cell: ({ getValue }) => <span className="text-xs">{getValue() as string}</span> },
+    { accessorKey: 'RequiredQuantityInPurchaseUnit', header: 'Req.Qty(P.U.)', size: 85, cell: ({ row }) => <span className="text-xs">{Number(row.original.RequiredQuantityInPurchaseUnit ?? row.original.RequiredQuantity ?? 0).toFixed(2)}</span> },
     {
       accessorKey: 'RequiredNoOfPacks',
       header: 'No. of Packs',
@@ -348,31 +438,14 @@ export default function PurchaseOrderModal({
       accessorKey: 'PurchaseQuantity',
       header: 'P.O.Qty(P.U.)',
       size: 90,
-      cell: ({ row }) => {
-        const maxQty = row.original.PurchaseQuantityComp
-        return !isReadOnly ? (
-          <div>
-            <input
-              type="number"
-              value={row.original.PurchaseQuantity ?? ''}
-              min={0}
-              max={maxQty}
-              onChange={e => {
-                const val = parseFloat(e.target.value) || 0
-                const capped = maxQty != null ? Math.min(val, maxQty) : val
-                updateItem(row.index, { PurchaseQuantity: capped })
-              }}
-              className={`w-full px-1.5 py-0.5 text-xs border rounded text-right bg-[rgb(var(--bg-surface))] ${
-                maxQty != null && (row.original.PurchaseQuantity ?? 0) > maxQty
-                  ? 'border-red-500'
-                  : 'border-[rgb(var(--bd-default))]'
-              }`}
-            />
-            {maxQty != null && <div className="text-[10px] text-[rgb(var(--fg-muted))] text-right">max {maxQty}</div>}
-          </div>
-        ) : <span className="text-xs">{Number(row.original.PurchaseQuantity ?? 0).toFixed(2)}</span>
-      },
+      cell: ({ row }) => !isReadOnly ? (
+        <input type="number" value={row.original.PurchaseQuantity ?? ''} min={0}
+          onChange={e => updateItem(row.index, { PurchaseQuantity: parseFloat(e.target.value) || 0 })}
+          className="w-full px-1.5 py-0.5 text-xs border rounded text-right bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))]" />
+      ) : <span className="text-xs">{Number(row.original.PurchaseQuantity ?? 0).toFixed(2)}</span>,
     },
+    { accessorKey: 'PurchaseUnit',    header: 'Purchase Unit', size: 90,  cell: ({ getValue }) => <span className="text-xs">{getValue() as string}</span> },
+    { accessorKey: 'PurchaseQuantityInStockUnit', header: 'P.O.Qty(S.U.)', size: 90, cell: ({ row }) => <span className="text-xs">{Number(row.original.PurchaseQuantityInStockUnit ?? row.original.PurchaseQuantity ?? 0).toFixed(2)}</span> },
     {
       accessorKey: 'PurchaseRate',
       header: 'Rate',
@@ -383,7 +456,6 @@ export default function PurchaseOrderModal({
           className="w-full px-1.5 py-0.5 text-xs border rounded text-right bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))]" />
       ) : <span className="text-xs">{Number(row.original.PurchaseRate ?? 0).toFixed(2)}</span>,
     },
-    { accessorKey: 'PurchaseUnit',    header: 'P. Unit',      size: 70,  cell: ({ getValue }) => <span className="text-xs">{getValue() as string}</span> },
     {
       accessorKey: 'ProductHSNName',
       header: 'HSN',
@@ -405,8 +477,14 @@ export default function PurchaseOrderModal({
       size: 130,
       cell: ({ row }) => !isReadOnly ? (
         <DatePicker
-          value={row.original.ExpectedDeliveryDate ? new Date(row.original.ExpectedDeliveryDate) : undefined}
-          onChange={d => updateItem(row.index, { ExpectedDeliveryDate: d instanceof Date ? d.toISOString().split('T')[0] : undefined })}
+          value={row.original.ExpectedDeliveryDate ? new Date(row.original.ExpectedDeliveryDate + 'T00:00:00') : undefined}
+          onChange={d => {
+            let s: string | undefined
+            if (typeof d === 'string' && d) s = d
+            else if (d instanceof Date) s = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+            updateItem(row.index, { ExpectedDeliveryDate: s })
+          }}
+          returnFormat="string"
           className="h-7 w-28 text-xs"
         />
       ) : <span className="text-xs">{row.original.ExpectedDeliveryDate ? formatDate(row.original.ExpectedDeliveryDate) : ''}</span>,
@@ -421,6 +499,7 @@ export default function PurchaseOrderModal({
           className="w-full px-1.5 py-0.5 text-xs border rounded text-right bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))]" />
       ) : <span className="text-xs">{row.original.Tolerance ?? 0}</span>,
     },
+    { accessorKey: 'BasicAmount',  header: 'Basic Amt',  size: 90, cell: ({ getValue }) => <span className="text-xs text-right block">₹{Number(getValue() ?? 0).toFixed(2)}</span> },
     {
       accessorKey: 'Disc',
       header: 'Disc. %',
@@ -431,6 +510,16 @@ export default function PurchaseOrderModal({
           className="w-full px-1.5 py-0.5 text-xs border rounded text-right bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))]" />
       ) : <span className="text-xs">{row.original.Disc ?? 0}</span>,
     },
+    {
+      id: 'DiscAmt',
+      header: 'Disc. Amt',
+      size: 90,
+      cell: ({ row }) => {
+        const discAmt = (row.original.BasicAmount ?? 0) - (row.original.AfterDisAmt ?? 0)
+        return <span className="text-xs text-right block">₹{discAmt.toFixed(2)}</span>
+      },
+    },
+    { accessorKey: 'AfterDisAmt', header: 'After Disc. Amt', size: 105, cell: ({ getValue }) => <span className="text-xs text-right block">₹{Number(getValue() ?? 0).toFixed(2)}</span> },
     { accessorKey: 'CGSTTaxPercentage', header: 'CGST %', size: 65, cell: ({ getValue }) => <span className="text-xs">{Number(getValue() ?? 0).toFixed(2)}%</span> },
     { accessorKey: 'SGSTTaxPercentage', header: 'SGST %', size: 65, cell: ({ getValue }) => <span className="text-xs">{Number(getValue() ?? 0).toFixed(2)}%</span> },
     { accessorKey: 'IGSTTaxPercentage', header: 'IGST %', size: 65, cell: ({ getValue }) => <span className="text-xs">{Number(getValue() ?? 0).toFixed(2)}%</span> },
@@ -438,7 +527,8 @@ export default function PurchaseOrderModal({
     { accessorKey: 'SGSTAmt',           header: 'SGST Amt', size: 85, cell: ({ getValue }) => <span className="text-xs">₹{Number(getValue() ?? 0).toFixed(2)}</span> },
     { accessorKey: 'IGSTAmt',           header: 'IGST Amt', size: 85, cell: ({ getValue }) => <span className="text-xs">₹{Number(getValue() ?? 0).toFixed(2)}</span> },
     { accessorKey: 'TotalAmount',       header: 'Total Amt', size: 100, cell: ({ getValue }) => <span className="text-xs font-medium">₹{Number(getValue() ?? 0).toFixed(2)}</span> },
-    { accessorKey: 'RefJobCardContentNo', header: 'Job Card', size: 110, cell: ({ getValue }) => <span className="text-xs">{getValue() as string || ''}</span> },
+    { accessorKey: 'RefJobCardContentNo', header: 'Job Card No.', size: 110, cell: ({ getValue }) => <span className="text-xs">{getValue() as string || ''}</span> },
+    { accessorKey: 'ClientID',            header: 'Ref. Customer', size: 120, cell: ({ getValue }) => <span className="text-xs">{getValue() as string || ''}</span> },
     {
       accessorKey: 'Remark',
       header: 'Remark',
@@ -493,65 +583,99 @@ export default function PurchaseOrderModal({
 
   // ── Additional charges columns ─────────────────────────────────────────────
   const chargesColumns = useMemo((): ColumnDef<AdditionalChargesItem>[] => [
-    { accessorKey: 'LedgerName', header: 'Tax Ledger', size: 160, cell: ({ getValue }) => <span className="text-xs">{getValue() as string}</span> },
+    { accessorKey: 'LedgerName', header: 'Tax Ledger', size: 130, cell: ({ getValue }) => <span className="text-xs font-medium">{getValue() as string}</span> },
     {
       accessorKey: 'Percentage',
       header: '%',
-      size: 80,
+      size: 60,
       cell: ({ row }) => (
         <input type="number" value={row.original.Percentage ?? ''} min={0}
-          onChange={e => {
-            const v = parseFloat(e.target.value) || 0
-            setAdditionalCharges(prev => prev.map((c, i) => i === row.index ? { ...c, Percentage: v } : c))
-          }}
+          onChange={e => updateCharge(row.index, { Percentage: parseFloat(e.target.value) || 0 })}
           disabled={isReadOnly}
           className="w-full px-1.5 py-0.5 text-xs border rounded text-right bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))] disabled:opacity-60" />
       ),
     },
-    { accessorKey: 'CalculateOn', header: 'Calc. On', size: 100, cell: ({ getValue }) => <span className="text-xs">{getValue() as string}</span> },
+    {
+      accessorKey: 'CalculateOn',
+      header: 'Calcu. ON',
+      size: 95,
+      cell: ({ row }) => (
+        <select value={row.original.CalculateOn ?? ''} disabled={isReadOnly}
+          onChange={e => updateCharge(row.index, { CalculateOn: e.target.value })}
+          className="w-full px-1 py-0.5 text-xs border rounded bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))] disabled:opacity-60">
+          <option value="Basic">Basic</option>
+          <option value="Basic+Tax">Basic+Tax</option>
+          <option value="Total">Total</option>
+        </select>
+      ),
+    },
     {
       accessorKey: 'GSTApplicable',
-      header: 'GST Applicable',
-      size: 110,
+      header: 'GST App.',
+      size: 75,
       cell: ({ row }) => (
         <div className="flex items-center justify-center">
           <input type="checkbox" checked={!!row.original.GSTApplicable} disabled={isReadOnly}
-            onChange={e => setAdditionalCharges(prev => prev.map((c, i) => i === row.index ? { ...c, GSTApplicable: e.target.checked } : c))}
-            className="h-3.5 w-3.5" />
+            onChange={e => updateCharge(row.index, { GSTApplicable: e.target.checked })}
+            className="h-4 w-4 cursor-pointer accent-[rgb(var(--color-primary))]" />
         </div>
       ),
     },
     {
-      accessorKey: 'InAmountChecked',
+      id: 'AmountWithToggle',
       header: 'In Amount',
+      size: 150,
+      cell: ({ row }) => {
+        const isGST = /cgst|sgst|igst/i.test(row.original.LedgerName)
+        return (
+          <div className="flex items-center gap-1.5 w-full">
+            {/* Checkbox — hidden for GST rows (amount is auto from items) */}
+            {!isGST && (
+              <input
+                type="checkbox"
+                checked={!!row.original.InAmountChecked}
+                disabled={isReadOnly}
+                onChange={e => updateCharge(row.index, { InAmountChecked: e.target.checked })}
+                className="h-4 w-4 flex-shrink-0 cursor-pointer accent-[rgb(var(--color-primary))]"
+              />
+            )}
+            {/* Amount — read-only for GST (synced from items), editable for others */}
+            {isGST ? (
+              <span className="flex-1 px-1.5 py-0.5 text-xs text-right font-medium text-[rgb(var(--fg-default))]">
+                {Number(row.original.Amount ?? 0).toFixed(2)}
+              </span>
+            ) : (
+              <input
+                type="number"
+                value={row.original.Amount ?? 0}
+                min={0}
+                disabled={isReadOnly}
+                onChange={e => updateCharge(row.index, { Amount: parseFloat(e.target.value) || 0, InAmountChecked: true })}
+                className="flex-1 min-w-0 px-1.5 py-0.5 text-xs border rounded text-right bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))] disabled:opacity-60"
+              />
+            )}
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: 'TaxType',
+      header: 'Tax Type',
       size: 90,
       cell: ({ row }) => (
-        <div className="flex items-center justify-center">
-          <input type="checkbox" checked={!!row.original.InAmountChecked} disabled={isReadOnly}
-            onChange={e => setAdditionalCharges(prev => prev.map((c, i) => i === row.index ? { ...c, InAmountChecked: e.target.checked } : c))}
-            className="h-3.5 w-3.5" />
-        </div>
-      ),
-    },
-    {
-      accessorKey: 'Amount',
-      header: 'Amount',
-      size: 100,
-      cell: ({ row }) => (
-        <input type="number" value={row.original.Amount ?? ''} min={0}
-          disabled={isReadOnly || !row.original.InAmountChecked}
-          onChange={e => {
-            const v = parseFloat(e.target.value) || 0
-            setAdditionalCharges(prev => prev.map((c, i) => i === row.index ? { ...c, Amount: v } : c))
-          }}
-          className="w-full px-1.5 py-0.5 text-xs border rounded text-right bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))] disabled:opacity-50" />
+        <input type="text" value={row.original.TaxType ?? ''} disabled={isReadOnly}
+          onChange={e => updateCharge(row.index, { TaxType: e.target.value })}
+          className="w-full px-1.5 py-0.5 text-xs border rounded bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))] disabled:opacity-60" />
       ),
     },
     ...(!isReadOnly ? [createActionsColumn<AdditionalChargesItem>({
-      onDelete: (item) => setAdditionalCharges(prev => prev.filter(c => c.id !== item.id)),
+      onDelete: (item) => {
+        setAdditionalCharges(prev => prev.filter(c => c.id !== item.id))
+        setSelectedChargeIds(prev => { const next = new Set(prev); next.delete(item.id); return next })
+      },
       showDelete: true, showEdit: false, showView: false, mode: 'buttons', primaryActions: ['delete'],
     })] : []),
-  ], [isReadOnly])
+  ], [isReadOnly, updateCharge])
 
   // ── Delivery schedule columns ──────────────────────────────────────────────
   const scheduleColumns = useMemo((): ColumnDef<DeliveryScheduleItem>[] => [
@@ -586,7 +710,7 @@ export default function PurchaseOrderModal({
           size="master"
           hideCloseButton
           disableOutsideClick
-          className="p-0 flex flex-col overflow-hidden"
+          className="p-0 flex flex-col overflow-hidden max-sm:!w-screen max-sm:!h-[100dvh] max-sm:!max-w-none max-sm:!rounded-none max-sm:!translate-x-0 max-sm:!translate-y-0 max-sm:!top-0 max-sm:!left-0"
           aria-describedby="po-modal-desc"
         >
           {/* Header */}
@@ -599,16 +723,18 @@ export default function PurchaseOrderModal({
           </DialogHeader>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto scrollbar-hide p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto scrollbar-hide p-3 sm:p-6 space-y-4 sm:space-y-6">
 
             {/* ── Header Form ────────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <Label className="text-xs text-[rgb(var(--fg-muted))]">P.O. No.</Label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-12 gap-3 items-end">
+              {/* PO No */}
+              <div className="col-span-1 sm:col-span-2 md:col-span-2">
+                <Label className="text-xs text-[rgb(var(--fg-muted))]">PO No</Label>
                 <Input value={poNo} disabled className="bg-[rgb(var(--bg-subtle))] mt-1 font-mono text-xs" />
               </div>
-              <div>
-                <Label className="text-xs text-[rgb(var(--fg-muted))]">Date</Label>
+              {/* PO Date */}
+              <div className="col-span-1 sm:col-span-2 md:col-span-2">
+                <Label className="text-xs text-[rgb(var(--fg-muted))]">PO Date</Label>
                 <DatePicker
                   value={formData.voucherDate}
                   onChange={d => d instanceof Date && set('voucherDate', d)}
@@ -616,39 +742,32 @@ export default function PurchaseOrderModal({
                   className="mt-1 h-9 w-full"
                 />
               </div>
-              <div>
-                <Label className="text-xs text-[rgb(var(--fg-muted))]">Supplier <span className="text-red-500">*</span></Label>
+              {/* Supplier Name */}
+              <div className="col-span-2 sm:col-span-4 md:col-span-4">
+                <Label className="text-xs text-[rgb(var(--fg-muted))]">Supplier Name <span className="text-red-500">*</span></Label>
                 <Dropdown
                   options={PO_SUPPLIERS}
                   value={formData.supplierName}
                   onValueChange={v => set('supplierName', v)}
-                  placeholder="Select Supplier"
+                  placeholder="Select supplier"
                   disabled={isReadOnly}
                   className="mt-1"
                 />
               </div>
-              <div>
+              {/* Contact Person */}
+              <div className="col-span-1 sm:col-span-2 md:col-span-2">
                 <Label className="text-xs text-[rgb(var(--fg-muted))]">Contact Person</Label>
                 <Dropdown
                   options={PO_CONTACT_PERSONS}
                   value={formData.contactPerson}
                   onValueChange={v => set('contactPerson', v)}
-                  placeholder="Select"
+                  placeholder="Select person"
                   disabled={isReadOnly}
                   className="mt-1"
                 />
               </div>
-              <div>
-                <Label className="text-xs text-[rgb(var(--fg-muted))]">Purchase Division</Label>
-                <Dropdown
-                  options={PO_DIVISIONS}
-                  value={formData.purchaseDivision}
-                  onValueChange={v => set('purchaseDivision', v)}
-                  disabled={isReadOnly}
-                  className="mt-1"
-                />
-              </div>
-              <div>
+              {/* Currency */}
+              <div className="col-span-1 sm:col-span-2 md:col-span-2">
                 <Label className="text-xs text-[rgb(var(--fg-muted))]">Currency</Label>
                 <Dropdown
                   options={PO_CURRENCIES}
@@ -658,76 +777,16 @@ export default function PurchaseOrderModal({
                   className="mt-1"
                 />
               </div>
-              <div>
-                <Label className="text-xs text-[rgb(var(--fg-muted))]">Transport Mode <span className="text-red-500">*</span></Label>
-                <Dropdown
-                  options={PO_TRANSPORT_MODES}
-                  value={formData.modeOfTransport}
-                  onValueChange={v => set('modeOfTransport', v)}
-                  placeholder="Select"
-                  disabled={isReadOnly}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label className="text-xs text-[rgb(var(--fg-muted))]">Dealer Name</Label>
-                <Input
-                  value={formData.dealerName}
-                  onChange={e => set('dealerName', e.target.value)}
-                  disabled={isReadOnly}
-                  className="mt-1"
-                />
-              </div>
-              <div className="col-span-2 md:col-span-2">
-                <Label className="text-xs text-[rgb(var(--fg-muted))]">Delivery At</Label>
-                <div className="flex gap-2 mt-1">
-                  <Input
-                    value={formData.deliveryAt}
-                    onChange={e => set('deliveryAt', e.target.value)}
-                    placeholder="Enter or select address"
-                    disabled={isReadOnly}
-                    className="flex-1"
-                  />
-                  {!isReadOnly && (
-                    <Button variant="ghost" size="sm" className="h-9 w-9 p-0 flex-shrink-0" onClick={() => setAddressOpen(true)}>
-                      <MapPin className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <div className="col-span-2 md:col-span-2">
-                <Label className="text-xs text-[rgb(var(--fg-muted))]">Purchase Reference</Label>
-                <Input
-                  value={formData.purchaseReference}
-                  onChange={e => set('purchaseReference', e.target.value)}
-                  placeholder="Reference / remarks"
-                  disabled={isReadOnly}
-                  className="mt-1"
-                />
-              </div>
             </div>
-
-            {/* ── Close Remark ───────────────────────────────────────────── */}
-            {mode === 'close' && (
-              <div>
-                <Label className="text-xs text-[rgb(var(--fg-muted))]">Closed Remark <span className="text-red-500">*</span></Label>
-                <Textarea
-                  value={closedRemark}
-                  onChange={e => setClosedRemark(e.target.value)}
-                  placeholder="Enter reason for closing this PO"
-                  className="mt-1 h-20 resize-none"
-                />
-              </div>
-            )}
 
             {/* ── Items Grid ─────────────────────────────────────────────── */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-[rgb(var(--fg-default))]">Items ({items.length})</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <span className="text-sm font-semibold text-[rgb(var(--fg-default))]">Purchase Order Items</span>
                 {!isReadOnly && (
-                  <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" icon={FileText} onClick={() => setOldPOOpen(true)}>Old PO History</Button>
-                    <Button variant="action-create" size="sm" icon={Plus} onClick={() => alerts.showInfo('Info', 'Add Item from master — connect to Item Master modal')}>Add Item</Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="action-create" size="sm" icon={Plus} onClick={() => alerts.showInfo('Info', 'Add Item from master')}>+ Add Item</Button>
+                    <Button variant="outline" size="sm" icon={FileText} onClick={() => setOldPOOpen(true)}>Old PO History</Button>
                   </div>
                 )}
               </div>
@@ -736,7 +795,7 @@ export default function PurchaseOrderModal({
                 columns={itemColumns}
                 getRowId={(row) => String(row.ItemID ?? row.TransactionID)}
                 enableRowSelection={false}
-                enableSearch={false}
+                enableSearch={true}
                 enableFilterRow={false}
                 enablePagination={false}
                 enableSorting={false}
@@ -751,40 +810,62 @@ export default function PurchaseOrderModal({
               )}
             </div>
 
-            {/* ── Payment Terms ──────────────────────────────────────────── */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-[rgb(var(--fg-default))]">Payment Terms</span>
-              </div>
-              {!isReadOnly && (
-                <div className="flex gap-2 mb-3">
-                  <div className="flex-1 relative">
-                    <Input
-                      value={paymentTermInput}
-                      onChange={e => setPaymentTermInput(e.target.value)}
-                      placeholder="Enter or select payment terms"
-                      className="pr-9"
-                    />
-                    <div className="absolute right-0 top-0 bottom-0 flex items-center pr-1">
-                      <Dropdown
-                        options={PO_PAYMENT_TERMS_OPTIONS}
-                        value=""
-                        onValueChange={v => setPaymentTermInput(String(v))}
-                        searchable={false}
-                        placeholder=""
-                        triggerClassName="!border-none !bg-transparent !shadow-none !p-0 !h-8 !min-h-0"
-                      />
+            {/* ── Payment Terms / Additional Charges / Amount Summary ─── */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+
+              {/* Amount Summary — first on mobile, last on desktop */}
+              <div className="order-first md:order-last md:col-span-2">
+                <p className="text-sm font-semibold text-[rgb(var(--fg-default))] mb-2">Amount Summary</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-1 gap-2">
+                  {[
+                    { label: 'Basic Amt',       value: amounts.basicAmt     },
+                    { label: 'Disc. Amt',        value: amounts.discAmt      },
+                    { label: 'After Disc. Amt',  value: amounts.afterDiscAmt },
+                    { label: 'GST Amt',          value: amounts.gstAmt       },
+                    { label: 'Other Tax',        value: amounts.otherTax     },
+                    { label: 'Total Tax',        value: amounts.totalTax     },
+                    { label: 'Net Amount',       value: amounts.grossAmt,    highlight: true },
+                  ].map(({ label, value, highlight }) => (
+                    <div key={label} className={`flex justify-between items-center px-2 py-1.5 rounded border ${highlight ? 'bg-green-50 border-green-200' : 'bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))]'}`}>
+                      <span className="text-[11px] text-[rgb(var(--fg-muted))]">{label}</span>
+                      <span className={`text-xs font-bold ${highlight ? 'text-green-700' : 'text-[rgb(var(--fg-default))]'}`}>₹{value}</span>
                     </div>
-                  </div>
-                  <Button variant="action-create" size="sm" icon={Plus} onClick={handleAddPaymentTerm} className="h-9 w-9 p-0" />
+                  ))}
                 </div>
-              )}
-              {paymentTerms.length > 0 ? (
+              </div>
+
+              {/* Payment Terms — col-4 */}
+              <div className="order-2 md:order-first md:col-span-4">
+                {!isReadOnly && (
+                  <div className="flex gap-2 mb-2">
+                    <div className="flex-1 relative">
+                      <Input
+                        value={paymentTermInput}
+                        onChange={e => setPaymentTermInput(e.target.value)}
+                        placeholder="Enter or select payment terms"
+                        className="pr-9"
+                      />
+                      <div className="absolute right-0 top-0 bottom-0 flex items-center pr-1">
+                        <Dropdown
+                          options={PO_PAYMENT_TERMS_OPTIONS}
+                          value=""
+                          onValueChange={v => setPaymentTermInput(String(v))}
+                          searchable={false}
+                          placeholder=""
+                          triggerClassName="!border-none !bg-transparent !shadow-none !p-0 !h-8 !min-h-0"
+                        />
+                      </div>
+                    </div>
+                    <Button variant="action-create" size="sm" icon={Plus} onClick={handleAddPaymentTerm} className="h-9 w-9 p-0" />
+                  </div>
+                )}
                 <DataGrid
                   data={paymentTerms}
                   columns={paymentTermsColumns}
                   getRowId={r => String(r.id)}
-                  enableRowSelection={false}
+                  title="Payment Terms"
+                  enableRowSelection={true}
+                  rowSelectionMode="single"
                   enableSearch={false}
                   enableFilterRow={false}
                   enablePagination={false}
@@ -792,34 +873,34 @@ export default function PurchaseOrderModal({
                   enableExport={false}
                   enableColumnVisibility={false}
                 />
-              ) : (
-                <p className="text-xs text-[rgb(var(--fg-muted))] py-2">No payment terms added.</p>
-              )}
-            </div>
+              </div>
 
-            {/* ── Additional Charges ─────────────────────────────────────── */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-[rgb(var(--fg-default))]">Additional Charges</span>
+              {/* Additional Charges — col-6 */}
+              <div className="order-3 md:col-span-6">
+                {/* Tax Ledger label + select + add */}
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-semibold text-[rgb(var(--fg-default))]">Tax Ledger</span>
+                </div>
                 {!isReadOnly && (
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 mb-2">
                     <Dropdown
                       options={PO_CHARGE_LEDGERS}
                       value={chargesLedger}
                       onValueChange={v => setChargesLedger(String(v))}
-                      placeholder="Select charge type"
-                      className="w-44"
+                      placeholder="Select ledger"
+                      className="flex-1"
                     />
-                    <Button variant="action-create" size="sm" icon={Plus} onClick={handleAddCharge} className="h-8 w-8 p-0" />
+                    <Button variant="action-create" size="sm" icon={Plus} onClick={handleAddCharge} className="h-9 w-9 p-0 flex-shrink-0" />
                   </div>
                 )}
-              </div>
-              {additionalCharges.length > 0 ? (
                 <DataGrid
                   data={additionalCharges}
                   columns={chargesColumns}
                   getRowId={r => String(r.id)}
-                  enableRowSelection={false}
+                  title="Additional Charges"
+                  enableRowSelection={true}
+                  rowSelectionMode="multi"
+                  onRowSelect={handleChargeRowSelect}
                   enableSearch={false}
                   enableFilterRow={false}
                   enablePagination={false}
@@ -827,39 +908,78 @@ export default function PurchaseOrderModal({
                   enableExport={false}
                   enableColumnVisibility={false}
                 />
-              ) : (
-                <p className="text-xs text-[rgb(var(--fg-muted))] py-2">No additional charges.</p>
-              )}
+              </div>
+
             </div>
 
-            {/* ── Amount Summary ─────────────────────────────────────────── */}
-            <div className="bg-[rgb(var(--bg-subtle))] rounded-lg border border-[rgb(var(--bd-default))] p-4">
-              <p className="text-sm font-semibold text-[rgb(var(--fg-default))] mb-3">Amount Summary</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { label: 'Basic Amount',   value: amounts.basicAmt },
-                  { label: 'GST Amount',     value: amounts.gstAmt   },
-                  { label: 'Other Charges',  value: amounts.otherAmt },
-                  { label: 'Net Amount',     value: amounts.netAmt, highlight: true },
-                ].map(({ label, value, highlight }) => (
-                  <div key={label} className={`text-center p-3 rounded-lg border ${highlight ? 'bg-[rgb(var(--color-primary))]/5 border-[rgb(var(--color-primary))]/30' : 'bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))]'}`}>
-                    <p className="text-xs text-[rgb(var(--fg-muted))] mb-1">{label}</p>
-                    <p className={`text-base font-bold ${highlight ? 'text-[rgb(var(--color-primary))]' : 'text-[rgb(var(--fg-default))]'}`}>₹{value}</p>
-                  </div>
-                ))}
+            {/* ── Mode of Transport + Delivery At ───────────────────────── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-xs text-[rgb(var(--fg-muted))]">Mode Of Transport <span className="text-red-500">*</span></Label>
+                <Dropdown
+                  options={PO_TRANSPORT_MODES}
+                  value={formData.modeOfTransport}
+                  onValueChange={v => set('modeOfTransport', v)}
+                  placeholder="Select"
+                  disabled={isReadOnly}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-[rgb(var(--fg-muted))]">Delivery At</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    value={formData.deliveryAt}
+                    onChange={e => set('deliveryAt', e.target.value)}
+                    placeholder="Enter delivery address"
+                    disabled={isReadOnly}
+                    className="flex-1"
+                  />
+                  {!isReadOnly && (
+                    <Button variant="ghost" size="sm" className="h-9 w-9 p-0 flex-shrink-0" onClick={() => setAddressOpen(true)}>
+                      <MapPin className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* ── File Attachments ───────────────────────────────────────── */}
-            {!isReadOnly && (
+            {/* ── Purchase Remark + Multiple Attachment ──────────────────── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <p className="text-sm font-semibold text-[rgb(var(--fg-default))] mb-2">Attachments</p>
-                <FileAttachment
-                  value={attachedFiles}
-                  onChange={setAttachedFiles}
-                  maxFiles={5}
-                  maxFileSize={5 * 1024 * 1024}
-                  acceptedFileTypes={['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png']}
+                <Label className="text-xs text-[rgb(var(--fg-muted))]">Purchase Remark</Label>
+                <Textarea
+                  value={formData.purchaseReference}
+                  onChange={e => set('purchaseReference', e.target.value)}
+                  placeholder="Enter purchase remark"
+                  disabled={isReadOnly}
+                  className="mt-1 h-24 resize-none"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-[rgb(var(--fg-muted))]">Multiple Attachment</Label>
+                <div className="mt-1">
+                  <FileAttachment
+                    value={attachedFiles}
+                    onChange={setAttachedFiles}
+                    maxFiles={5}
+                    maxFileSize={5 * 1024 * 1024}
+                    acceptedFileTypes={['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png', '.eml']}
+                    disabled={isReadOnly}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ── Close Remark (mode=close only) ─────────────────────────── */}
+            {mode === 'close' && (
+              <div>
+                <Label className="text-xs text-[rgb(var(--fg-muted))]">Closed Remark <span className="text-red-500">*</span></Label>
+                <Textarea
+                  value={closedRemark}
+                  onChange={e => setClosedRemark(e.target.value)}
+                  placeholder="Enter reason for closing this PO"
+                  className="mt-1 h-20 resize-none"
                 />
               </div>
             )}

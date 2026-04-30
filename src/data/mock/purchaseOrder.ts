@@ -98,6 +98,7 @@ export interface PurchaseOrderDetailItem {
   ItemNarration?: string
   Narration?: string
   Remark?: string
+  ClientID?: string
   ProductionUnitName?: string
   CompanyName?: string
   CreatedBy?: string
@@ -482,10 +483,10 @@ export const MOCK_PURCHASE_ORDERS: PurchaseOrderItem[] = [
 // ─── Mock Lookup Data ─────────────────────────────────────────────────────────
 
 export const PO_SUPPLIERS = [
-  { value: 'SUP001', label: 'ABC Suppliers Pvt Ltd' },
-  { value: 'SUP002', label: 'XYZ Trading Company' },
-  { value: 'SUP003', label: 'Global Materials Inc' },
-  { value: 'SUP004', label: 'Reliable Chemicals Ltd' },
+  { value: 'SUP001', label: 'ABC Suppliers Pvt Ltd',  gstType: 'intrastate' as const },
+  { value: 'SUP002', label: 'XYZ Trading Company',    gstType: 'intrastate' as const },
+  { value: 'SUP003', label: 'Global Materials Inc',   gstType: 'interstate' as const },
+  { value: 'SUP004', label: 'Reliable Chemicals Ltd', gstType: 'intrastate' as const },
 ]
 
 export const PO_CONTACT_PERSONS = [
@@ -522,10 +523,20 @@ export const PO_PAYMENT_TERMS_OPTIONS = [
 ]
 
 export const PO_CHARGE_LEDGERS = [
-  { value: 'LED001', label: 'Freight Charges' },
-  { value: 'LED002', label: 'Handling Charges' },
-  { value: 'LED003', label: 'Packing Charges' },
-  { value: 'LED004', label: 'Insurance' },
+  { value: 'LED001', label: 'CGST' },
+  { value: 'LED002', label: 'SGST' },
+  { value: 'LED003', label: 'IGST' },
+  { value: 'LED004', label: 'Freight' },
+  { value: 'LED005', label: 'Handling Charges' },
+  { value: 'LED006', label: 'Packing Charges' },
+  { value: 'LED007', label: 'Insurance' },
+  { value: 'LED008', label: 'Round Off' },
+  { value: 'LED009', label: 'TDS' },
+  { value: 'LED010', label: 'Labour Charges' },
+  { value: 'LED011', label: 'Transportation Charges' },
+  { value: 'LED012', label: 'Service Charges' },
+  { value: 'LED013', label: 'Inspection Charges' },
+  { value: 'LED014', label: 'Other Charges' },
 ]
 
 export const PO_DELIVERY_ADDRESSES = [

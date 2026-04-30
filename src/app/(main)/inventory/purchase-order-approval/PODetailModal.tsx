@@ -429,6 +429,8 @@ export default function PODetailModal({ isOpen, onClose, order, filterType, onAc
       {/* Cancel Remark Dialog */}
       <Dialog open={remarkOpen} onOpenChange={(open) => !open && setRemarkOpen(false)}>
         <DialogContent
+          hideCloseButton
+          disableOutsideClick
           className="p-0 flex flex-col overflow-hidden max-w-md"
           aria-describedby="remark-desc"
         >
@@ -460,6 +462,8 @@ export default function PODetailModal({ isOpen, onClose, order, filterType, onAc
       {/* Delivery Schedule View Sub-modal */}
       <Dialog open={scheduleOpen} onOpenChange={(open) => !open && setScheduleOpen(false)}>
         <DialogContent
+          hideCloseButton
+          disableOutsideClick
           className="p-0 flex flex-col overflow-hidden max-w-lg"
           aria-describedby="schedule-view-desc"
         >

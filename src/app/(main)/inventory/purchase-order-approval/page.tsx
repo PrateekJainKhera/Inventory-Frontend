@@ -18,6 +18,7 @@ function POApprovalContent() {
   const [orders, setOrders] = useState<POListView[]>([...MOCK_PO_APPROVAL_LIST])
   const [selectedOrder, setSelectedOrder] = useState<POListView | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [gridKey, setGridKey] = useState(0)
 
   const filtered = useMemo(() => {
     switch (filterType) {
@@ -39,6 +40,7 @@ function POApprovalContent() {
   const handleFilterChange = (f: FilterType) => {
     setFilterType(f)
     setSelectedOrder(null)
+    setGridKey(k => k + 1)
   }
 
   const handleRowSelect = useCallback((rows: POListView[]) => {
@@ -70,6 +72,7 @@ function POApprovalContent() {
     }))
     setIsDetailOpen(false)
     setSelectedOrder(null)
+    setGridKey(k => k + 1)
     const actionLabels: Record<string, string> = { Approve: 'approved', UnApprove: 'un-approved', Cancel: 'cancelled', UnCancel: 'un-cancelled' }
     alerts.showSuccess('Success', `Purchase Order ${actionLabels[action]} successfully`)
   }, [alerts])
@@ -146,23 +149,17 @@ function POApprovalContent() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="py-3 px-4 bg-[rgb(var(--bg-default))] min-h-screen"
+      className="h-full flex flex-col overflow-hidden py-3 px-4 bg-[rgb(var(--bg-default))]"
     >
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex-1" />
-        <h1 className="flex-1 text-center text-xl font-bold text-[rgb(var(--fg-default))]">
-          Purchase Order Approval
-        </h1>
-        <div className="flex-1" />
-      </div>
-
       <DataGrid
+        className="flex-1 min-h-0"
+        key={gridKey}
         data={filtered}
         columns={columns}
         getRowId={(row) => String(row.TransactionID)}
         preToggleActions={filterToggleButtons}
         enableRowSelection={true}
-        rowSelectionMode="single"
+        rowSelectionMode="multi"
         onRowSelect={handleRowSelect}
         onRowClick={handleViewDetails}
         enableSearch={true}
@@ -179,7 +176,7 @@ function POApprovalContent() {
 
       <PODetailModal
         isOpen={isDetailOpen}
-        onClose={() => { setIsDetailOpen(false); setSelectedOrder(null) }}
+        onClose={() => { setIsDetailOpen(false); setSelectedOrder(null); setGridKey(k => k + 1) }}
         order={selectedOrder}
         filterType={filterType}
         onAction={handleApprovalAction}

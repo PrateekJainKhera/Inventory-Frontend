@@ -6,7 +6,7 @@ import { useState } from 'react'
 import {
   Package, Warehouse, BookOpen, ChevronDown, ChevronRight,
   Box, ShoppingCart, ClipboardList, CheckSquare,
-  FileText, BadgeCheck, Lock, Search, Bell, Mail,
+  FileText, BadgeCheck, Lock, Bell, Mail,
   PanelLeftOpen, PanelLeftClose, Menu, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -27,11 +27,13 @@ const navigation = [
     label: 'Procurement',
     icon: ShoppingCart,
     children: [
-      { label: 'Requisition',          href: '/inventory/purchaserequisition',    icon: ClipboardList },
-      { label: 'Requisition Approval', href: '/inventory/requisition-approval',   icon: CheckSquare  },
-      { label: 'Purchase Order',       href: '/inventory/purchaseorder',          icon: FileText     },
-      { label: 'PO Approval',          href: '/inventory/purchase-order-approval', icon: BadgeCheck  },
-      { label: 'PO Close',             href: '/inventory/purchase-order-close',   icon: Lock         },
+      { label: 'Purchase Requisition',         href: '/inventory/purchaserequisition',    icon: ClipboardList },
+      { label: 'Requisition Approval',        href: '/inventory/requisition-approval',   icon: CheckSquare  },
+      { label: 'Purchase Order',              href: '/inventory/purchaseorder',          icon: FileText     },
+      { label: 'Purchase Order Approval',     href: '/inventory/purchase-order-approval', icon: BadgeCheck  },
+      { label: 'Purchase Order Close',        href: '/inventory/purchase-order-close',   icon: Lock         },
+      { label: 'Purchase GRN',                href: '/inventory/purchase-grn',           icon: FileText     },
+      { label: 'GRN Approval',                href: '/inventory/grn-approval',           icon: BadgeCheck   },
     ],
   },
 ]
@@ -143,10 +145,17 @@ function ExpandedSidebar({ onClose }: { onClose?: () => void }) {
 }
 
 // ── Root layout ───────────────────────────────────────────────────────────────
+function usePageTitle() {
+  const pathname = usePathname()
+  const allItems = navigation.flatMap(s => s.children)
+  const match = allItems.find(item => pathname.startsWith(item.href))
+  return match?.label ?? ''
+}
+
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
+  const pageTitle = usePageTitle()
 
   return (
     <SearchPreferencesProvider>
@@ -157,7 +166,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <header className="sticky top-0 z-50 w-full bg-[#002852] border-b border-white/15 shadow-sm shrink-0">
           <div className="flex h-11 items-center justify-between px-2 sm:px-4 gap-2 sm:gap-3">
 
-            {/* Left: toggle + company + plant + year + greeting */}
+            {/* Left: toggle + company */}
             <div className="flex items-center gap-1 sm:gap-2 flex-shrink min-w-0">
 
               {/* Mobile sidebar open */}
@@ -186,37 +195,17 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 Inventory App
               </span>
 
-              {/* Production unit chip */}
-              <div className="hidden sm:flex items-center gap-1 bg-white/10 border border-white/20 rounded px-2 h-6 text-[10px] sm:text-xs text-white">
-                <span className="whitespace-nowrap">Main Plant</span>
-                <ChevronDown className="h-3 w-3 text-white/50 ml-0.5" />
-              </div>
-
-              {/* FY Year chip */}
-              <div className="hidden sm:flex bg-white/10 border border-white/20 rounded px-2 sm:px-2.5 h-6 items-center justify-center">
-                <span className="text-white font-medium text-[10px] sm:text-xs whitespace-nowrap">2026-2027</span>
-              </div>
-
-              {/* Greeting — xl only */}
-              <span className="hidden xl:block text-white/90 text-sm font-medium whitespace-nowrap">
-                Hello Admin
-              </span>
             </div>
 
-            {/* Right: search + mail + notifications + user */}
-            <div className="flex items-center gap-1 sm:gap-2 lg:gap-3 flex-shrink-0">
-
-              {/* Search */}
-              <div className="relative hidden md:block">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/60 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search modules..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="pl-9 pr-3 py-0.5 w-48 lg:w-64 h-7 text-xs rounded border bg-white/10 border-white/20 text-white placeholder:text-white/60 focus:bg-white/15 focus:border-white/30 focus:outline-none focus:ring-1 focus:ring-white/20 transition-all"
-                />
+            {/* Center: page title */}
+            {pageTitle && (
+              <div className="absolute left-1/2 -translate-x-1/2 hidden sm:block">
+                <span className="text-white font-semibold text-sm tracking-wide">{pageTitle}</span>
               </div>
+            )}
+
+            {/* Right: mail + notifications + user */}
+            <div className="flex items-center gap-1 sm:gap-2 lg:gap-3 flex-shrink-0">
 
               {/* Mail */}
               <button className="p-1.5 sm:p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-md transition-colors" aria-label="Mail">
@@ -274,7 +263,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
           {/* Main content — ml-12 to account for collapsed sidebar */}
           <div className="flex flex-1 flex-col overflow-hidden lg:ml-12">
-            <main className="flex-1 overflow-y-auto scrollbar-hide">
+            <main className="flex-1 overflow-hidden flex flex-col">
               {children}
             </main>
           </div>

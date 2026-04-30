@@ -136,17 +136,10 @@ function POCloseContent() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="py-3 px-4 bg-[rgb(var(--bg-default))] min-h-screen"
+      className="h-full flex flex-col overflow-hidden py-3 px-4 bg-[rgb(var(--bg-default))]"
     >
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex-1" />
-        <h1 className="flex-1 text-center text-xl font-bold text-[rgb(var(--fg-default))]">
-          Purchase Order Close
-        </h1>
-        <div className="flex-1" />
-      </div>
-
       <DataGrid
+        className="flex-1 min-h-0"
         data={filtered}
         columns={columns}
         getRowId={(row) => `${row.PurchaseTransactionID}-${row.ItemID}`}

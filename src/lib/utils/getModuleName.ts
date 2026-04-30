@@ -14,6 +14,8 @@ export function getModuleName(pathname: string): string {
     'job-card': 'Job Card',
     'production': 'Production',
     'purchase-order': 'Purchase Order',
+    'purchase-grn': 'Purchase GRN',
+    'grn-approval': 'GRN Approval',
     'invoice': 'Invoice',
     'delivery': 'Delivery',
   }

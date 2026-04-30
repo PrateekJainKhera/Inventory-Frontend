@@ -252,7 +252,7 @@ export function DataGrid<TData>({
   style,
   compactMode = false,
   minHeight = 120,
-  maxHeight = "calc(100vh - 300px)", // Default: standard mode, responsive to screen height
+  maxHeight = "calc(100vh - 160px)", // top-header(44) + page-padding(24) + grid-toolbar(60) + pagination(56) + buffer
   rowHeight = 24.75,
   // Baccha Search props
   mainColumns,

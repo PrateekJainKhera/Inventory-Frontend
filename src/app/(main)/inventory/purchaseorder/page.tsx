@@ -2,11 +2,11 @@
 
 import { useState, useMemo, useCallback, Suspense } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, List, FileText, Trash2, Edit, Printer, Eye, XCircle, Loader2 } from 'lucide-react'
+import { Plus, List, FileText, Loader2 } from 'lucide-react'
 import { ColumnDef } from '@tanstack/react-table'
 import { useGlobalAlert } from '@/contexts/GlobalAlertContext'
 import { Badge } from '@/components/ui'
-import { DataGrid } from '@/components/datagrid'
+import { DataGrid, createActionsColumn } from '@/components/datagrid'
 import { cn, formatDate } from '@/lib/utils'
 import {
   derivePendingRequisitions,
@@ -27,6 +27,7 @@ function PurchaseOrderContent() {
   const [orders, setOrders] = useState<PurchaseOrderItem[]>([...MOCK_PURCHASE_ORDERS])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [selectedRequisitionIds, setSelectedRequisitionIds] = useState<Set<number>>(new Set())
+  const [requisitionGridKey, setRequisitionGridKey] = useState(0)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingOrder, setEditingOrder] = useState<PurchaseOrderItem | null>(null)
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view' | 'close'>('create')
@@ -103,6 +104,7 @@ function PurchaseOrderContent() {
     setIsModalOpen(false)
     setEditingOrder(null)
     setSelectedRequisitionIds(new Set())
+    setRequisitionGridKey(k => k + 1)
   }, [])
 
   const handleModalSuccess = useCallback(() => {
@@ -110,6 +112,7 @@ function PurchaseOrderContent() {
       markRequisitionsAsPOCreated([...selectedRequisitionIds])
       setRequisitions(derivePendingRequisitions())
       setSelectedRequisitionIds(new Set())
+      setRequisitionGridKey(k => k + 1)
     }
     alerts.showSuccess('Success', 'Purchase Order created successfully')
   }, [alerts, viewMode, selectedRequisitionIds])
@@ -185,61 +188,22 @@ function PurchaseOrderContent() {
     })
 
     // Actions column
-    base.push({
-      id: 'actions',
-      header: 'Actions',
-      size: 160,
-      cell: ({ row }) => {
-        const order = row.original
-        const isEditable = !order.VoucherItemApproved && !order.VoucherCancelled && !order.ManuallyClosed
-        const showClose = statusFilter === 'approved' && order.VoucherItemApproved && !order.VoucherCancelled && !order.ManuallyClosed
-        return (
-          <div className="flex items-center justify-center gap-1">
-            <button
-              onClick={(e) => { e.stopPropagation(); handlePrint(order) }}
-              className="p-1 rounded hover:text-[rgb(var(--color-info))] hover:bg-[rgb(var(--color-info))]/10 transition-colors"
-              title="Print"
-            >
-              <Printer className="h-4 w-4" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleView(order) }}
-              className="p-1 rounded hover:text-[rgb(var(--color-success))] hover:bg-[rgb(var(--color-success))]/10 transition-colors"
-              title="View"
-            >
-              <Eye className="h-4 w-4" />
-            </button>
-            {isEditable && (
-              <button
-                onClick={(e) => { e.stopPropagation(); handleEdit(order) }}
-                className="p-1 rounded hover:text-orange-500 hover:bg-orange-50 transition-colors"
-                title="Edit"
-              >
-                <Edit className="h-4 w-4" />
-              </button>
-            )}
-            {showClose && (
-              <button
-                onClick={(e) => { e.stopPropagation(); handleClosePO(order) }}
-                className="p-1 rounded hover:text-yellow-600 hover:bg-yellow-50 transition-colors"
-                title="Close PO"
-              >
-                <XCircle className="h-4 w-4" />
-              </button>
-            )}
-            {isEditable && (
-              <button
-                onClick={(e) => { e.stopPropagation(); handleDelete(order) }}
-                className="p-1 rounded hover:text-[rgb(var(--color-error))] hover:bg-[rgb(var(--color-error))]/10 transition-colors"
-                title="Delete"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        )
-      }
-    })
+    base.push(createActionsColumn<PurchaseOrderItem>({
+      onPrint:   (o) => handlePrint(o),
+      onView:    (o) => handleView(o),
+      onEdit:    (o) => handleEdit(o),
+      onArchive: (o) => handleClosePO(o),
+      onDelete:  (o) => handleDelete(o),
+      showPrint:   true,
+      showView:    true,
+      showEdit:    (o) => !o.VoucherItemApproved && !o.VoucherCancelled && !o.ManuallyClosed,
+      showArchive: (o) => statusFilter === 'approved' && !!o.VoucherItemApproved && !o.VoucherCancelled && !o.ManuallyClosed,
+      showDelete:  (o) => !o.VoucherItemApproved && !o.VoucherCancelled && !o.ManuallyClosed,
+      mode: 'buttons',
+      primaryActions: ['print', 'view', 'edit', 'archive', 'delete'],
+      labels: { archive: 'Close PO' },
+      confirmDelete: true,
+    }))
 
     return base
   }, [statusFilter, handlePrint, handleView, handleEdit, handleClosePO, handleDelete])
@@ -285,15 +249,11 @@ function PurchaseOrderContent() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="py-3 px-4 bg-[rgb(var(--bg-default))] min-h-screen"
+      className="h-full flex flex-col overflow-hidden py-3 px-2 sm:px-4 bg-[rgb(var(--bg-default))]"
     >
-      {/* Page header */}
+      {/* View toggle row + Create button */}
       <div className="mb-3">
-        {/* Title row */}
-        <h1 className="text-center text-xl font-bold text-[rgb(var(--fg-default))] mb-2">Purchase Order</h1>
-
-        {/* View toggle row */}
-        <div className="flex justify-start">
+        <div className="flex items-center justify-between gap-3">
           <div className="inline-flex items-center justify-center bg-[rgb(var(--bg-subtle))] rounded-full border border-[rgb(var(--bd-default))]">
             <button
               onClick={() => handleViewModeChange('requisitions')}
@@ -328,7 +288,8 @@ function PurchaseOrderContent() {
       {/* Data Grid */}
       {viewMode === 'requisitions' ? (
         <DataGrid
-          key="requisitions"
+          className="flex-1 min-h-0"
+          key={`requisitions-${requisitionGridKey}`}
           data={requisitions}
           columns={requisitionColumns}
           getRowId={(row) => String(row.TransactionID)}
@@ -349,6 +310,7 @@ function PurchaseOrderContent() {
         />
       ) : (
         <DataGrid
+          className="flex-1 min-h-0"
           key="orders"
           data={filteredOrders}
           columns={orderColumns}
@@ -382,13 +344,12 @@ function PurchaseOrderContent() {
         }
         mode={modalMode}
       />
-      {/* FAB — only in requisitions view */}
+      {/* FAB — always enabled; 0 selected = direct PO, >0 selected = from requisitions */}
       {viewMode === 'requisitions' && (
         <button
           onClick={handleCreatePO}
-          disabled={selectedCount === 0}
-          title="Create Purchase Order"
-          className="fixed bottom-6 right-6 z-50 h-11 px-4 rounded-full bg-[rgb(var(--color-primary))] text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center gap-2 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-xl"
+          title={selectedCount > 0 ? `Create PO from ${selectedCount} selected requisition(s)` : 'Create Purchase Order directly'}
+          className="fixed bottom-6 right-6 z-50 h-11 px-4 rounded-full bg-[rgb(var(--color-primary))] text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center gap-2 text-sm font-semibold"
         >
           <Plus className="h-5 w-5" />
           <span>Create PO{selectedCount > 0 ? ` (${selectedCount})` : ''}</span>

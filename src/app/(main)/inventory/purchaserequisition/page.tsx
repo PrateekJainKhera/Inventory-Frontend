@@ -213,8 +213,8 @@ function PurchaseRequisitionPageContent() {
 
   const requisitionColumns = useMemo((): ColumnDef<RequisitionRecord>[] => {
     const actionsCol = createActionsColumn<RequisitionRecord>({
-      onEdit: handleEdit,
-      onDelete: (row) => handleDelete(row),
+      onPrint:   (row) => alerts.showInfo('Print', `Printing ${row.VoucherNo}`),
+      onEdit:    handleEdit,
       onArchive: (row) => {
         alerts.showConfirmation(
           'Manual Close',
@@ -222,12 +222,15 @@ function PurchaseRequisitionPageContent() {
           () => handleManualClose(row)
         )
       },
-      showView: false,
-      showEdit: true,
-      showDelete: true,
+      onDelete:  (row) => handleDelete(row),
+      showPrint:   true,
+      showView:    false,
+      showEdit:    true,
       showArchive: (row) => !row.ManuallyClosed,
-      mode: 'mixed',
-      primaryActions: ['edit', 'delete'],
+      showDelete:  true,
+      mode: 'buttons',
+      primaryActions: ['print', 'edit', 'archive', 'delete'],
+      maxVisibleActions: 4,
       confirmDelete: true,
       labels: { archive: 'Manual Close' },
       deleteConfirmation: {
@@ -273,13 +276,8 @@ function PurchaseRequisitionPageContent() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="py-3 px-4 bg-[rgb(var(--bg-default))] min-h-screen"
+      className="h-full flex flex-col overflow-hidden py-3 px-4 bg-[rgb(var(--bg-default))]"
     >
-      {/* Page Title */}
-      <div className="text-center mb-1 px-3">
-        <h1 className="text-xl font-bold text-[rgb(var(--fg-default))]">Purchase Requisition</h1>
-      </div>
-
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3 px-3">
         {/* View tabs */}
@@ -341,6 +339,7 @@ function PurchaseRequisitionPageContent() {
       {/* Indent List */}
       {viewMode === 'indent' && (
         <DataGrid
+          className="flex-1 min-h-0"
           data={indentData}
           columns={indentColumns}
           getRowId={(row) => String(row._uid)}
@@ -365,6 +364,7 @@ function PurchaseRequisitionPageContent() {
       {/* Requisitions List */}
       {viewMode === 'requisitions' && (
         <DataGrid
+          className="flex-1 min-h-0"
           data={filteredRequisitions}
           columns={requisitionColumns}
           getRowId={(row) => String(row.TransactionID)}

@@ -117,16 +117,11 @@ export default function WarehouseMasterPage() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="py-3 px-4 bg-[rgb(var(--bg-default))] min-h-screen"
+      className="h-full flex flex-col overflow-hidden py-3 px-4 bg-[rgb(var(--bg-default))]"
     >
-      {/* Page Title */}
-      <div className="text-center mb-2 px-3">
-        <h1 className="text-xl font-bold text-[rgb(var(--fg-default))]">Warehouse Master</h1>
-      </div>
-
-
       {/* DataGrid */}
       <DataGrid
+        className="flex-1 min-h-0"
         data={warehouses}
         columns={columns}
         onRowClick={handleEdit}

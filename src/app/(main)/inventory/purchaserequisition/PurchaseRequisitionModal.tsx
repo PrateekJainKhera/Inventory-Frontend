@@ -317,9 +317,9 @@ export function PurchaseRequisitionModal({
   const totalPurchaseQty = items.reduce((s, i) => s + (i.PurchaseQty || 0), 0)
 
   // Single-call handler — computes derived qty fields inline
-  const handleItemChange = React.useCallback((index: number, field: keyof RequisitionItem, value: any) => {
-    setItems(prev => prev.map((item, i) => {
-      if (i !== index) return item
+  const handleItemChange = React.useCallback((itemId: number, field: keyof RequisitionItem, value: any) => {
+    setItems(prev => prev.map((item) => {
+      if (item.ItemID !== itemId) return item
       const updated: RequisitionItem = { ...item, [field]: value }
       const numVal = parseFloat(value) || 0
       if (field === 'RequiredNoOfPacks') {
@@ -381,7 +381,19 @@ export function PurchaseRequisitionModal({
     { accessorKey: 'ItemName', header: 'Item Name', size: 250 },
 
     // 5. Job Name
-    { accessorKey: 'JobName', header: 'Job Name', size: 200 },
+    {
+      accessorKey: 'JobName',
+      header: 'Job Name',
+      size: 200,
+      cell: ({ row }) => (
+        <EditableCell
+          value={row.original.JobName ?? ''}
+          onChange={value => handleItemChange(row.original.ItemID, 'JobName', value)}
+          className="h-8 text-xs"
+          placeholder="Enter job name"
+        />
+      ),
+    },
 
     // 6. Job Card No
     {
@@ -395,13 +407,13 @@ export function PurchaseRequisitionModal({
             value={row.original.RefJobCardContentNo || ''}
             onValueChange={(value) => {
               const v = Array.isArray(value) ? value[0] : String(value || '')
-              handleItemChange(row.index, 'RefJobCardContentNo', v)
+              handleItemChange(row.original.ItemID, 'RefJobCardContentNo', v)
               const job = JOB_CARDS.find(j => j.value === v)
               if (job) {
                 const parts = job.label.split(' – ')
-                handleItemChange(row.index, 'JobName', parts[1] ?? parts[0] ?? '')
+                handleItemChange(row.original.ItemID, 'JobName', parts[1] ?? parts[0] ?? '')
                 if (job.clientId != null) {
-                  handleItemChange(row.index, 'ClientID', job.clientId)
+                  handleItemChange(row.original.ItemID, 'ClientID', job.clientId)
                 }
               }
             }}
@@ -422,7 +434,7 @@ export function PurchaseRequisitionModal({
         <EditableCell
           type="number"
           value={row.original.RequiredNoOfPacks}
-          onChange={value => handleItemChange(row.index, 'RequiredNoOfPacks', value)}
+          onChange={value => handleItemChange(row.original.ItemID, 'RequiredNoOfPacks', value)}
           className="h-8 text-xs text-right"
         />
       ),
@@ -437,24 +449,36 @@ export function PurchaseRequisitionModal({
         <EditableCell
           type="number"
           value={row.original.QuantityPerPack}
-          onChange={value => handleItemChange(row.index, 'QuantityPerPack', value)}
+          onChange={value => handleItemChange(row.original.ItemID, 'QuantityPerPack', value)}
           className="h-8 text-xs text-right"
         />
       ),
     },
 
-    // 9. Purchase Qty — highlighted blue
+    // 9. P.O. Qty (in P.U.) — editable, highlighted blue
     {
       accessorKey: 'PurchaseQty',
-      header: 'Purchase Qty',
-      size: 110,
+      header: 'P.O. Qty (in P.U.)',
+      size: 130,
       cell: ({ row }) => (
         <EditableCell
           type="number"
           value={row.original.PurchaseQty}
-          onChange={value => handleItemChange(row.index, 'PurchaseQty', value)}
+          onChange={value => handleItemChange(row.original.ItemID, 'PurchaseQty', value)}
           className="h-8 text-xs text-right font-bold bg-blue-50 border-blue-300 text-blue-700"
         />
+      ),
+    },
+
+    // 9b. P.O. Qty (in S.U.) — auto-calculated, read-only
+    {
+      id: 'PurchaseQtyInSU',
+      header: 'P.O. Qty (in S.U.)',
+      size: 130,
+      cell: ({ row }) => (
+        <span className="text-[rgb(var(--fg-muted))] block w-full text-right pr-2">
+          {(Number(row.original.PurchaseQty) * (row.original.ConversionFactor || 1)).toFixed(2)}
+        </span>
       ),
     },
 
@@ -466,7 +490,7 @@ export function PurchaseRequisitionModal({
       cell: ({ row }) => (
         <EditableCell
           value={row.original.ItemNarration}
-          onChange={value => handleItemChange(row.index, 'ItemNarration', value)}
+          onChange={value => handleItemChange(row.original.ItemID, 'ItemNarration', value)}
           className="h-8 text-xs"
           placeholder="Enter remark"
         />
@@ -534,17 +558,19 @@ export function PurchaseRequisitionModal({
       size: 130,
       cell: ({ row }) => {
         const dateVal = row.original.ExpectedDeliveryDate
-          ? new Date(row.original.ExpectedDeliveryDate)
+          ? new Date(row.original.ExpectedDeliveryDate + 'T00:00:00')
           : undefined
         return (
           <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
             <DatePicker
               value={dateVal}
               onChange={(date) => {
-                if (date instanceof Date) {
-                  handleItemChange(row.index, 'ExpectedDeliveryDate', date.toISOString().split('T')[0])
-                } else if (typeof date === 'string' && date) {
-                  handleItemChange(row.index, 'ExpectedDeliveryDate', date)
+                if (typeof date === 'string' && date) {
+                  handleItemChange(row.original.ItemID, 'ExpectedDeliveryDate', date)
+                } else if (date instanceof Date) {
+                  const d = date
+                  const s = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+                  handleItemChange(row.original.ItemID, 'ExpectedDeliveryDate', s)
                 }
               }}
               mode="single"
@@ -568,7 +594,7 @@ export function PurchaseRequisitionModal({
             value={row.original.ClientID ? String(row.original.ClientID) : ''}
             onValueChange={(value) => {
               const v = Array.isArray(value) ? value[0] : String(value || '')
-              handleItemChange(row.index, 'ClientID', v ? parseInt(v) : null)
+              handleItemChange(row.original.ItemID, 'ClientID', v ? parseInt(v) : null)
             }}
             placeholder="Select Customer"
             searchable={true}
