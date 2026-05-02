@@ -93,6 +93,8 @@ export interface GRNBatchDetail {
   Bin: string
   WarehouseBin: string
   Remark: string
+  SizeW?: number
+  ItemGroupNameID?: number
 }
 
 export interface GRNListItem {

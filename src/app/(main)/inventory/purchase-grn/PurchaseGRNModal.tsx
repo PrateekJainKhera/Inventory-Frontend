@@ -40,6 +40,34 @@ function asDate(val: Date | string | { from?: Date; to?: Date } | undefined): Da
   return null
 }
 
+function calcSUFromPU(b: GRNBatchDetail, pu: number): number {
+  const upp = Number(b.UnitPerPacking)
+  if (b.ItemGroupID === 13 || (b.PurchaseUnit === 'MTR' && b.StockUnit === 'SQM')) {
+    return b.SizeW && b.SizeW > 0 ? (pu * b.SizeW) / 1000 : pu
+  }
+  if (b.ItemGroupNameID === -1) {
+    return b.ConversionFactor > 0 && upp > 0 ? (pu * b.ConversionFactor) / upp : pu
+  }
+  if (b.ItemGroupNameID === -6) {
+    return b.SizeW && b.SizeW > 0 ? (pu * b.SizeW) / 1000 : pu
+  }
+  return pu
+}
+
+function calcPUFromSU(b: GRNBatchDetail, su: number): number {
+  const upp = Number(b.UnitPerPacking)
+  if (b.ItemGroupID === 13 || (b.PurchaseUnit === 'MTR' && b.StockUnit === 'SQM')) {
+    return b.SizeW && b.SizeW > 0 ? (su * 1000) / b.SizeW : su
+  }
+  if (b.ItemGroupNameID === -1) {
+    return b.ConversionFactor > 0 && upp > 0 ? (su * upp) / b.ConversionFactor : su
+  }
+  if (b.ItemGroupNameID === -6) {
+    return b.SizeW && b.SizeW > 0 ? (su * 1000) / b.SizeW : su
+  }
+  return su
+}
+
 function makeBatchRow(po: PendingPOItem, seq: number): GRNBatchDetail {
   return {
     TransactionID: 0,
@@ -464,14 +492,20 @@ export default function PurchaseGRNModal({ isOpen, onClose, selectedOrders, edit
                           <td className={tdCls}>
                             <input type="number" min={0} step="0.001"
                               value={b.ReceiptQuantity || ''}
-                              onChange={e => updateBatch(idx, { ReceiptQuantity: parseFloat(e.target.value) || 0 })}
+                              onChange={e => {
+                                const su = parseFloat(e.target.value) || 0
+                                updateBatch(idx, { ReceiptQuantity: su, ReceiptQuantityInPurchaseUnit: calcPUFromSU(b, su) })
+                              }}
                               className={`${inputCls} w-24 text-right`}
                               disabled={isViewOnly} />
                           </td>
                           <td className={tdCls}>
                             <input type="number" min={0} step="0.001"
                               value={b.ReceiptQuantityInPurchaseUnit || ''}
-                              onChange={e => updateBatch(idx, { ReceiptQuantityInPurchaseUnit: parseFloat(e.target.value) || 0 })}
+                              onChange={e => {
+                                const pu = parseFloat(e.target.value) || 0
+                                updateBatch(idx, { ReceiptQuantityInPurchaseUnit: pu, ReceiptQuantity: calcSUFromPU(b, pu) })
+                              }}
                               className={`${inputCls} w-24 text-right`}
                               disabled={isViewOnly} />
                           </td>

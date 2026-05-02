@@ -12,12 +12,15 @@ export function formatCurrency(amount: number, currency = 'USD') {
   }).format(amount)
 }
 
-export function formatDate(date: Date | string) {
+export function formatDate(date: Date | string | null | undefined) {
+  if (!date) return ''
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return ''
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-  }).format(new Date(date))
+  }).format(d)
 }
 
 export function formatNumber(num: number, decimals = 0) {

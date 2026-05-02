@@ -19,6 +19,7 @@ import {
   type PurchaseOrderDetailItem,
   type PaymentTermsItem,
   type AdditionalChargesItem,
+  type FreightGSTType,
   type DeliveryScheduleItem,
   type HSNItem,
   PO_SUPPLIERS,
@@ -209,26 +210,41 @@ export default function PurchaseOrderModal({
       ? [
           { id: genId(), LedgerID: 1, LedgerName: 'CGST',    Percentage: 0, CalculateOn: 'Basic', GSTApplicable: true,  InAmountChecked: false, InAmount: 0, Amount: cgstAmt, TaxType: 'GST' },
           { id: genId(), LedgerID: 2, LedgerName: 'SGST',    Percentage: 0, CalculateOn: 'Basic', GSTApplicable: true,  InAmountChecked: false, InAmount: 0, Amount: sgstAmt, TaxType: 'GST' },
-          { id: genId(), LedgerID: 4, LedgerName: 'Freight', Percentage: 0, CalculateOn: 'Basic', GSTApplicable: false, InAmountChecked: false, InAmount: 0, Amount: 0,       TaxType: '' },
+          { id: genId(), LedgerID: 4, LedgerName: 'Freight', Percentage: 0, CalculateOn: 'Basic', GSTApplicable: false, InAmountChecked: false, InAmount: 0, Amount: 0,       TaxType: '', FreightGSTType: 'not_applicable' as FreightGSTType },
         ]
       : [
           { id: genId(), LedgerID: 3, LedgerName: 'IGST',    Percentage: 0, CalculateOn: 'Basic', GSTApplicable: true,  InAmountChecked: false, InAmount: 0, Amount: igstAmt, TaxType: 'GST' },
-          { id: genId(), LedgerID: 4, LedgerName: 'Freight', Percentage: 0, CalculateOn: 'Basic', GSTApplicable: false, InAmountChecked: false, InAmount: 0, Amount: 0,       TaxType: '' },
+          { id: genId(), LedgerID: 4, LedgerName: 'Freight', Percentage: 0, CalculateOn: 'Basic', GSTApplicable: false, InAmountChecked: false, InAmount: 0, Amount: 0,       TaxType: '', FreightGSTType: 'not_applicable' as FreightGSTType },
         ]
     setAdditionalCharges(rows)
     setSelectedChargeIds(new Set())
   }, [formData.supplierName, isReadOnly])
 
-  // ── Sync GST charge amounts from item totals ───────────────────────────────
+  // ── Supplier GST type ──────────────────────────────────────────────────────
+  const supplierGstType = useMemo(() => {
+    if (!formData.supplierName) return 'none' as const
+    return PO_SUPPLIERS.find(s => s.value === formData.supplierName)?.gstType ?? ('intrastate' as const)
+  }, [formData.supplierName])
+
+  // ── Sync GST charge amounts from item totals + freight GST ───────────────
   useEffect(() => {
-    setAdditionalCharges(prev => prev.map(charge => {
-      const name = charge.LedgerName.toLowerCase()
-      if (name === 'cgst') return { ...charge, Amount: parseFloat(items.reduce((s, i) => s + (i.CGSTAmt ?? 0), 0).toFixed(2)) }
-      if (name === 'sgst') return { ...charge, Amount: parseFloat(items.reduce((s, i) => s + (i.SGSTAmt ?? 0), 0).toFixed(2)) }
-      if (name === 'igst') return { ...charge, Amount: parseFloat(items.reduce((s, i) => s + (i.IGSTAmt ?? 0), 0).toFixed(2)) }
-      return charge
-    }))
-  }, [items])
+    setAdditionalCharges(prev => {
+      const freight = prev.find(c => c.FreightGSTType === 'hsn_row_po')
+      const fAmt = freight?.Amount ?? 0
+      const fRate = freight?.Percentage ?? 0
+      const isIntra = supplierGstType === 'intrastate'
+      const fCGST = isIntra && fRate > 0 ? parseFloat((fAmt * (fRate / 2) / 100).toFixed(2)) : 0
+      const fSGST = isIntra && fRate > 0 ? parseFloat((fAmt * (fRate / 2) / 100).toFixed(2)) : 0
+      const fIGST = !isIntra && fRate > 0 ? parseFloat((fAmt * fRate / 100).toFixed(2)) : 0
+      return prev.map(charge => {
+        const name = charge.LedgerName.toLowerCase()
+        if (name === 'cgst') return { ...charge, Amount: parseFloat((items.reduce((s, i) => s + (i.CGSTAmt ?? 0), 0) + fCGST).toFixed(2)) }
+        if (name === 'sgst') return { ...charge, Amount: parseFloat((items.reduce((s, i) => s + (i.SGSTAmt ?? 0), 0) + fSGST).toFixed(2)) }
+        if (name === 'igst') return { ...charge, Amount: parseFloat((items.reduce((s, i) => s + (i.IGSTAmt ?? 0), 0) + fIGST).toFixed(2)) }
+        return charge
+      })
+    })
+  }, [items, supplierGstType])
 
   // ── Amount calculations ────────────────────────────────────────────────────
   const amounts = useMemo(() => {
@@ -254,12 +270,6 @@ export default function PurchaseOrderModal({
       grossAmt:     (afterDiscAmt + totalTax).toFixed(2),
     }
   }, [items, additionalCharges, selectedChargeIds])
-
-  // ── Supplier GST type ──────────────────────────────────────────────────────
-  const supplierGstType = useMemo(() => {
-    if (!formData.supplierName) return 'none' as const
-    return PO_SUPPLIERS.find(s => s.value === formData.supplierName)?.gstType ?? ('intrastate' as const)
-  }, [formData.supplierName])
 
   // ── Item updater with auto-calculations ───────────────────────────────────
   // none:        no supplier selected → all GST = 0
@@ -331,15 +341,74 @@ export default function PurchaseOrderModal({
     setAdditionalCharges(prev => {
       const next = [...prev]
       const merged = { ...next[idx], ...patch }
-      // Auto-calc Amount from % when not in manual (InAmountChecked) mode
       if (!merged.InAmountChecked) {
         const basicAmt = items.reduce((s, i) => s + (i.BasicAmount ?? 0), 0)
         merged.Amount = parseFloat((basicAmt * (merged.Percentage ?? 0) / 100).toFixed(2))
       }
       next[idx] = merged
+
+      // When freight amount changes and it's HSN-based, propagate to CGST/SGST/IGST rows
+      if (merged.FreightGSTType === 'hsn_row_po' && 'Amount' in patch) {
+        const fAmt = merged.Amount ?? 0
+        const fRate = merged.Percentage ?? 0
+        const isIntra = supplierGstType === 'intrastate'
+        const fCGST = isIntra && fRate > 0 ? parseFloat((fAmt * (fRate / 2) / 100).toFixed(2)) : 0
+        const fSGST = isIntra && fRate > 0 ? parseFloat((fAmt * (fRate / 2) / 100).toFixed(2)) : 0
+        const fIGST = !isIntra && fRate > 0 ? parseFloat((fAmt * fRate / 100).toFixed(2)) : 0
+        const iCGST = items.reduce((s, i) => s + (i.CGSTAmt ?? 0), 0)
+        const iSGST = items.reduce((s, i) => s + (i.SGSTAmt ?? 0), 0)
+        const iIGST = items.reduce((s, i) => s + (i.IGSTAmt ?? 0), 0)
+        return next.map((c, i) => {
+          if (i === idx) return merged
+          const name = c.LedgerName.toLowerCase()
+          if (name === 'cgst') return { ...c, Amount: parseFloat((iCGST + fCGST).toFixed(2)) }
+          if (name === 'sgst') return { ...c, Amount: parseFloat((iSGST + fSGST).toFixed(2)) }
+          if (name === 'igst') return { ...c, Amount: parseFloat((iIGST + fIGST).toFixed(2)) }
+          return c
+        })
+      }
       return next
     })
-  }, [items])
+  }, [items, supplierGstType])
+
+  const handleFreightGSTChange = useCallback((idx: number, type: FreightGSTType) => {
+    setAdditionalCharges(prev => {
+      const next = [...prev]
+      const charge = { ...next[idx], FreightGSTType: type }
+      let fCGST = 0, fSGST = 0, fIGST = 0
+
+      if (type === 'not_applicable') {
+        charge.GSTApplicable = false
+        charge.Percentage = 0
+      } else if (type === 'hsn_row_po') {
+        const hsnRate = items.find(i => (i.GSTTaxPercentage ?? 0) > 0)?.GSTTaxPercentage ?? 0
+        charge.GSTApplicable = hsnRate > 0
+        charge.Percentage = hsnRate
+        if (!charge.InAmountChecked) {
+          const basicAmt = items.reduce((s, i) => s + (i.BasicAmount ?? 0), 0)
+          charge.Amount = parseFloat((basicAmt * hsnRate / 100).toFixed(2))
+        }
+        const isIntra = supplierGstType === 'intrastate'
+        const fAmt = charge.Amount ?? 0
+        fCGST = isIntra && hsnRate > 0 ? parseFloat((fAmt * (hsnRate / 2) / 100).toFixed(2)) : 0
+        fSGST = isIntra && hsnRate > 0 ? parseFloat((fAmt * (hsnRate / 2) / 100).toFixed(2)) : 0
+        fIGST = !isIntra && hsnRate > 0 ? parseFloat((fAmt * hsnRate / 100).toFixed(2)) : 0
+      }
+
+      next[idx] = charge
+      const iCGST = items.reduce((s, i) => s + (i.CGSTAmt ?? 0), 0)
+      const iSGST = items.reduce((s, i) => s + (i.SGSTAmt ?? 0), 0)
+      const iIGST = items.reduce((s, i) => s + (i.IGSTAmt ?? 0), 0)
+      return next.map((c, i) => {
+        if (i === idx) return charge
+        const name = c.LedgerName.toLowerCase()
+        if (name === 'cgst') return { ...c, Amount: parseFloat((iCGST + fCGST).toFixed(2)) }
+        if (name === 'sgst') return { ...c, Amount: parseFloat((iSGST + fSGST).toFixed(2)) }
+        if (name === 'igst') return { ...c, Amount: parseFloat((iIGST + fIGST).toFixed(2)) }
+        return c
+      })
+    })
+  }, [items, supplierGstType])
 
   // ── Delivery schedule ──────────────────────────────────────────────────────
   const handleAddSchedule = () => {
@@ -585,6 +654,26 @@ export default function PurchaseOrderModal({
   const chargesColumns = useMemo((): ColumnDef<AdditionalChargesItem>[] => [
     { accessorKey: 'LedgerName', header: 'Tax Ledger', size: 130, cell: ({ getValue }) => <span className="text-xs font-medium">{getValue() as string}</span> },
     {
+      id: 'FreightGSTType',
+      header: 'Freight GST',
+      size: 150,
+      cell: ({ row }) => {
+        const isGST = /cgst|sgst|igst/i.test(row.original.LedgerName)
+        if (isGST || row.original.FreightGSTType === undefined) return null
+        return (
+          <select
+            value={row.original.FreightGSTType}
+            disabled={isReadOnly}
+            onChange={e => handleFreightGSTChange(row.index, e.target.value as FreightGSTType)}
+            className="w-full px-1 py-0.5 text-xs border rounded bg-[rgb(var(--bg-surface))] border-[rgb(var(--bd-default))] disabled:opacity-60"
+          >
+            <option value="not_applicable">Not Applicable</option>
+            <option value="hsn_row_po">GST Applicable (HSN Row PO)</option>
+          </select>
+        )
+      },
+    },
+    {
       accessorKey: 'Percentage',
       header: '%',
       size: 60,
@@ -675,7 +764,7 @@ export default function PurchaseOrderModal({
       },
       showDelete: true, showEdit: false, showView: false, mode: 'buttons', primaryActions: ['delete'],
     })] : []),
-  ], [isReadOnly, updateCharge])
+  ], [isReadOnly, updateCharge, handleFreightGSTChange])
 
   // ── Delivery schedule columns ──────────────────────────────────────────────
   const scheduleColumns = useMemo((): ColumnDef<DeliveryScheduleItem>[] => [

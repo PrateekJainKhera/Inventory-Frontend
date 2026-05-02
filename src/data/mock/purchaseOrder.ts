@@ -109,6 +109,8 @@ export interface PaymentTermsItem {
   TermsDescription: string
 }
 
+export type FreightGSTType = 'not_applicable' | 'hsn_row_po'
+
 export interface AdditionalChargesItem {
   id: number
   LedgerID: number
@@ -120,6 +122,7 @@ export interface AdditionalChargesItem {
   InAmount: number
   Amount: number
   TaxType: string
+  FreightGSTType?: FreightGSTType
 }
 
 export interface DeliveryScheduleItem {

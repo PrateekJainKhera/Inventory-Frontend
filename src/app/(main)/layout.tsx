@@ -7,7 +7,7 @@ import {
   Package, Warehouse, BookOpen, ChevronDown, ChevronRight,
   Box, ShoppingCart, ClipboardList, CheckSquare,
   FileText, BadgeCheck, Lock, Bell, Mail,
-  PanelLeftOpen, PanelLeftClose, Menu, X,
+  PanelLeftOpen, PanelLeftClose, Menu, Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GlobalAlertProvider } from '@/contexts/GlobalAlertContext'
@@ -34,6 +34,9 @@ const navigation = [
       { label: 'Purchase Order Close',        href: '/inventory/purchase-order-close',   icon: Lock         },
       { label: 'Purchase GRN',                href: '/inventory/purchase-grn',           icon: FileText     },
       { label: 'GRN Approval',                href: '/inventory/grn-approval',           icon: BadgeCheck   },
+      { label: 'Purchase Invoice',           href: '/inventory/purchase-invoice',       icon: FileText     },
+      { label: 'GRN QC Approval',             href: '/inventory/grn-qc-approval',              icon: CheckSquare  },
+      { label: 'Item Physical Verification', href: '/inventory/item-physical-verification', icon: ClipboardList },
     ],
   },
 ]
@@ -73,6 +76,20 @@ function CollapsedSidebar() {
           </div>
         ))}
       </nav>
+      <div className="flex items-center justify-center py-2 border-t border-white/15 shrink-0">
+        <Link
+          href="/settings"
+          title="Settings"
+          className={cn(
+            'flex items-center justify-center w-8 h-8 rounded-md transition-colors',
+            pathname.startsWith('/settings')
+              ? 'bg-white/25 text-white shadow-sm'
+              : 'text-white/60 hover:bg-white/15 hover:text-white'
+          )}
+        >
+          <Settings className="h-4 w-4" />
+        </Link>
+      </div>
     </div>
   )
 }
@@ -137,8 +154,15 @@ function ExpandedSidebar({ onClose }: { onClose?: () => void }) {
         ))}
       </nav>
 
-      <div className="px-4 py-2 border-t border-white/15 shrink-0">
+      <div className="px-3 py-2 border-t border-white/15 shrink-0 flex items-center justify-between">
         <p className="text-xs text-white/40">Inventory v1.0 · Mock</p>
+        <Link
+          href="/settings"
+          title="Settings"
+          className="flex items-center justify-center w-7 h-7 rounded-md text-white/50 hover:bg-white/15 hover:text-white transition-colors"
+        >
+          <Settings className="h-3.5 w-3.5" />
+        </Link>
       </div>
     </div>
   )
