@@ -972,12 +972,24 @@ export function DataGrid<TData>({
     }
   }, [filteredData, reorderedData, getRowId, onRowOrderChange])
 
-  // Selected rows data - use getSelectedRowModel() to get ALL selected rows, not just filtered ones
+  // Selected rows — derived from rowSelection state (keyed by row ID) + data lookup.
+  // Intentionally excludes `table` from deps: `table` is recreated every render by
+  // useReactTable, so including it would recompute on every render, fire the effect
+  // every render, and call onRowSelect every render → infinite re-render loop.
   const selectedRows = useMemo(() => {
-    return table.getSelectedRowModel().rows.map(row => row.original)
-  }, [table, rowSelection])
+    const selectedIds = new Set(
+      Object.entries(rowSelection)
+        .filter(([, selected]) => selected)
+        .map(([id]) => id)
+    )
+    if (selectedIds.size === 0) return [] as TData[]
+    return data.filter(row => {
+      const id = getRowId ? getRowId(row) : String((row as any).id ?? '')
+      return selectedIds.has(id)
+    })
+  }, [rowSelection, data, getRowId])
 
-  // Notify parent of selected rows
+  // Notify parent of selected rows — only fires when selection actually changes
   React.useEffect(() => {
     onRowSelect?.(selectedRows)
   }, [selectedRows, onRowSelect])
@@ -1047,7 +1059,12 @@ export function DataGrid<TData>({
         setLastClickedRowIndex(rowIndex)
       }
     }
-  }, [enableRowClickSelection, viewMode, rowSelectionMode, enableShiftClickRange, enableCtrlClickMultiSelect, lastClickedRowIndex, table])
+
+    // Fire external onRowClick only on plain single click — not Ctrl/Shift multi-select
+    if (!isCtrlOrCmd && !isShift) {
+      onRowClick?.(row.original)
+    }
+  }, [enableRowClickSelection, viewMode, rowSelectionMode, enableShiftClickRange, enableCtrlClickMultiSelect, lastClickedRowIndex, table, onRowClick])
 
   // Keyboard handler for Space key selection
   useEffect(() => {

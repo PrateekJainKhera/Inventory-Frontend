@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { X, Plus, Printer } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, Input, Label, Textarea } from '@/components/ui'
 import { useGlobalAlert } from '@/contexts/GlobalAlertContext'
@@ -21,14 +21,26 @@ const inputCls = 'h-7 text-xs border border-[rgb(var(--border-default))] rounded
 export default function GRNQCApprovalModal({ isOpen, onClose, item }: Props) {
   const alerts = useGlobalAlert()
 
-  const [lines, setLines] = useState<GRNQCApprovalLine[]>(() =>
-    item ? [...(MOCK_QC_APPROVAL_LINES[item.ReceiptNoteNo] ?? [])] : []
-  )
-  const [dnNo, setDnNo] = useState(item?.DNNo ?? '')
+  const [lines, setLines] = useState<GRNQCApprovalLine[]>([])
+  const [dnNo, setDnNo] = useState('')
   const [gateEntryNo, setGateEntryNo] = useState('')
   const [lrVehicleNo, setLrVehicleNo] = useState('')
-  const [transporter, setTransporter] = useState(item?.Transporter ?? '')
-  const [remark, setRemark] = useState(item?.Remark ?? '')
+  const [transporter, setTransporter] = useState('')
+  const [remark, setRemark] = useState('')
+
+  // Reinitialize all fields whenever the modal opens with a new item
+  useEffect(() => {
+    if (isOpen && item) {
+      setLines([...(MOCK_QC_APPROVAL_LINES[item.ReceiptNoteNo] ?? [])])
+      setDnNo(item.DNNo ?? '')
+      setTransporter(item.Transporter ?? '')
+      setRemark(item.Remark ?? '')
+      setGateEntryNo('')
+      setLrVehicleNo('')
+      setQcModalOpen(false)
+      setActiveLine(null)
+    }
+  }, [isOpen, item])
 
   const [qcModalOpen, setQcModalOpen] = useState(false)
   const [activeLine, setActiveLine] = useState<GRNQCApprovalLine | null>(null)

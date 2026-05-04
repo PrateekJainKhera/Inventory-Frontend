@@ -20,31 +20,36 @@ interface Props {
 export function ShowListModal({ isOpen, onClose }: Props) {
   const alerts = useGlobalAlert()
   const [vouchers, setVouchers] = useState<VerificationVoucher[]>([])
-  const [selected, setSelected] = useState<VerificationVoucher | null>(null)
+  const [selected, setSelected] = useState<VerificationVoucher[]>([])
   const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    if (isOpen) setVouchers([...MOCK_VERIFICATION_VOUCHERS])
+    if (isOpen) {
+      setVouchers([...MOCK_VERIFICATION_VOUCHERS])
+      setSelected([])
+    }
   }, [isOpen])
 
-  const handleRowClick = useCallback((v: VerificationVoucher) => setSelected(v), [])
-
   const handleDelete = useCallback(() => {
-    if (!selected) {
-      alerts.showWarning('Warning', 'Please select a transaction first.')
+    if (selected.length === 0) {
+      alerts.showWarning('Warning', 'Please select at least one record to delete.')
       return
     }
+    const count = selected.length
     alerts.showConfirmation(
       'Are you sure?',
-      'The physical verification record will be deleted permanently.',
+      `${count} physical verification record${count > 1 ? 's' : ''} will be deleted permanently.`,
       () => {
         setDeleting(true)
-        const idx = MOCK_VERIFICATION_VOUCHERS.findIndex(v => v.TransactionID === selected.TransactionID)
-        if (idx !== -1) MOCK_VERIFICATION_VOUCHERS.splice(idx, 1)
+        const ids = new Set(selected.map(v => v.TransactionID))
+        ids.forEach(id => {
+          const idx = MOCK_VERIFICATION_VOUCHERS.findIndex(v => v.TransactionID === id)
+          if (idx !== -1) MOCK_VERIFICATION_VOUCHERS.splice(idx, 1)
+        })
         setVouchers([...MOCK_VERIFICATION_VOUCHERS])
-        setSelected(null)
+        setSelected([])
         setDeleting(false)
-        alerts.showSuccess('Deleted', 'Record deleted successfully.')
+        alerts.showSuccess('Deleted', `${count} record${count > 1 ? 's' : ''} deleted successfully.`)
       }
     )
   }, [selected, alerts])
@@ -98,26 +103,31 @@ export function ShowListModal({ isOpen, onClose }: Props) {
             className="h-full"
             data={vouchers}
             columns={columns}
-            onRowClick={handleRowClick}
+            onRowSelect={setSelected}
             getRowId={row => String(row.TransactionID)}
             enableFiltering
             enableColumnResizing
             enableVirtualization={false}
-            rowSelectionMode="single"
+            rowSelectionMode="multi"
             pageSize={100}
             stickyHeader
             initialColumnVisibility={columnVisibility}
           />
         </div>
 
-        <div className="flex-shrink-0 border-t border-[rgb(var(--bd-default))] px-4 py-2.5 flex items-center justify-end bg-[rgb(var(--bg-subtle))]">
+        <div className="flex-shrink-0 border-t border-[rgb(var(--bd-default))] px-4 py-2.5 flex items-center justify-between bg-[rgb(var(--bg-subtle))]">
+          <span className="text-xs text-[rgb(var(--fg-muted))]">
+            {selected.length > 0
+              ? `${selected.length} record${selected.length > 1 ? 's' : ''} selected`
+              : 'Select rows to delete'}
+          </span>
           <button
             onClick={handleDelete}
-            disabled={!selected || deleting}
+            disabled={selected.length === 0 || deleting}
             className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Trash2 size={12} />
-            {deleting ? 'Deleting...' : 'Delete'}
+            {deleting ? 'Deleting...' : selected.length > 1 ? `Delete (${selected.length})` : 'Delete'}
           </button>
         </div>
       </DialogContent>

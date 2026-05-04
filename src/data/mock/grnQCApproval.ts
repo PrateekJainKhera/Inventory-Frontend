@@ -94,12 +94,35 @@ export function makeQCParameters(noOfSamples: number): QCParameterRow[] {
 // ─── Mock: Lines by ReceiptNoteNo ─────────────────────────────────────────────
 
 export const MOCK_QC_APPROVAL_LINES: Record<string, GRNQCApprovalLine[]> = {
+  // Pending
   'REC00284_26_27': [
     { id: 1, PONo: 'PO00264_26_27', PODate: '2026-04-29', ItemCode: 'P01598', ItemGroup: 'PAPER', SubGroup: '', ItemName: 'IVORY, 200 GSM, JK, UnCoated, 711.2 X 558.8 MM', POQty: 4000, PurchaseUnit: 'Sheet', ReceiptQty: 4000, ApprQty: 0, HoldQty: 0, RejectQty: 0, RMQCNo: '', COANo: '', Remark: '', BatchNo: '10175_PO00264_26_27_5868_1.00', SupplierBatchNo: '', StockUnit: 'Sheet', Warehouse: 'Main Godown', Bin: 'Paper Store' },
-    { id: 2, PONo: 'PO00264_26_27', PODate: '2026-04-29', ItemCode: 'P01597', ItemGroup: 'PAPER', SubGroup: '', ItemName: 'IVORY, 200 GSM, JK, UnCoated, 7...', POQty: 7200, PurchaseUnit: 'Sheet', ReceiptQty: 7200, ApprQty: 0, HoldQty: 0, RejectQty: 0, RMQCNo: '', COANo: '', Remark: '', BatchNo: '10175_PO00264_26_27_5868_1.00', SupplierBatchNo: '-', StockUnit: 'Sheet', Warehouse: 'Main Godown', Bin: 'Paper Store' },
+    { id: 2, PONo: 'PO00264_26_27', PODate: '2026-04-29', ItemCode: 'P01597', ItemGroup: 'PAPER', SubGroup: '', ItemName: 'IVORY, 200 GSM, JK, UnCoated, 635 X 508 MM',        POQty: 7200, PurchaseUnit: 'Sheet', ReceiptQty: 7200, ApprQty: 0, HoldQty: 0, RejectQty: 0, RMQCNo: '', COANo: '', Remark: '', BatchNo: '10175_PO00264_26_27_5868_2.00', SupplierBatchNo: '', StockUnit: 'Sheet', Warehouse: 'Main Godown', Bin: 'Paper Store' },
   ],
   'REC00283_26_27': [
     { id: 1, PONo: 'PO00265_26_27', PODate: '2026-04-28', ItemCode: 'P01550', ItemGroup: 'PAPER', SubGroup: '', ItemName: 'SBS, 210 GSM, Reel Cut, Coated', POQty: 3000, PurchaseUnit: 'Sheet', ReceiptQty: 3000, ApprQty: 0, HoldQty: 0, RejectQty: 0, RMQCNo: '', COANo: '', Remark: '', BatchNo: 'BATCH-283-001', SupplierBatchNo: '', StockUnit: 'Sheet', Warehouse: 'Main Godown', Bin: 'Paper Store' },
+  ],
+  'REC00281_26_27': [
+    { id: 1, PONo: 'PO00267_26_27', PODate: '2026-04-29', ItemCode: 'P01599', ItemGroup: 'PAPER', SubGroup: '', ItemName: 'SBS, 300 GSM, Aprilfine, Coated, 71 X 55.8 CM', POQty: 5000, PurchaseUnit: 'Sheet', ReceiptQty: 5000, ApprQty: 0, HoldQty: 0, RejectQty: 0, RMQCNo: '', COANo: '', Remark: '', BatchNo: 'BATCH-281-001', SupplierBatchNo: '', StockUnit: 'Sheet', Warehouse: 'Main Godown', Bin: 'Paper Store' },
+  ],
+
+  // Processed
+  'REC00288_26_27': [
+    { id: 1, PONo: 'PO00268_26_27', PODate: '2026-04-30', ItemCode: 'P01234', ItemGroup: 'PAPER', SubGroup: 'KRAFT', ItemName: '18. Semi Kraft, 120 GSM, JN, UnCoated', POQty: 5000, PurchaseUnit: 'Sheet', ReceiptQty: 5000, ApprQty: 5000, HoldQty: 0, RejectQty: 0, RMQCNo: 'QC02128_26_27', COANo: 'COA-288-01', Remark: '', BatchNo: '10175_PO00268_26_27_5872_1.00', SupplierBatchNo: 'ISH-5872', StockUnit: 'Sheet', Warehouse: 'Main Godown', Bin: 'Paper Store' },
+    { id: 2, PONo: 'PO00268_26_27', PODate: '2026-04-30', ItemCode: 'P01235', ItemGroup: 'PAPER', SubGroup: 'KRAFT', ItemName: '18. Semi Kraft, 140 GSM, JN, UnCoated', POQty: 3000, PurchaseUnit: 'Sheet', ReceiptQty: 3000, ApprQty: 3000, HoldQty: 0, RejectQty: 0, RMQCNo: 'QC02129_26_27', COANo: 'COA-288-02', Remark: '', BatchNo: '10175_PO00268_26_27_5872_2.00', SupplierBatchNo: 'ISH-5873', StockUnit: 'Sheet', Warehouse: 'Main Godown', Bin: 'Paper Store' },
+  ],
+  'REC00287_26_27': [
+    { id: 1, PONo: 'PO00255_26_27', PODate: '2026-04-28', ItemCode: 'P00901', ItemGroup: 'CONSUMABLES', SubGroup: '', ItemName: 'Green Strip', POQty: 200, PurchaseUnit: 'Roll', ReceiptQty: 200, ApprQty: 200, HoldQty: 0, RejectQty: 0, RMQCNo: 'QC02127_26_27', COANo: '', Remark: '', BatchNo: 'BATCH-287-001', SupplierBatchNo: 'GS-200', StockUnit: 'Roll', Warehouse: 'Main Godown', Bin: 'Consumables' },
+  ],
+
+  // Hold
+  'REC00277_26_27': [
+    { id: 1, PONo: 'PO00263_26_27', PODate: '2026-04-28', ItemCode: 'P01112', ItemGroup: 'PAPER', SubGroup: '', ItemName: 'Prima Fold SBS, 290 GSM, Century, Coated', POQty: 6000, PurchaseUnit: 'Sheet', ReceiptQty: 6000, ApprQty: 0, HoldQty: 6000, RejectQty: 0, RMQCNo: 'QC02120_26_27', COANo: '', Remark: 'Shade mismatch', BatchNo: 'BATCH-277-001', SupplierBatchNo: 'JNT-6000', StockUnit: 'Sheet', Warehouse: 'Main Godown', Bin: 'Paper Store' },
+  ],
+
+  // Rejected
+  'REC00136_26_27': [
+    { id: 1, PONo: 'PO00126_26_27', PODate: '2026-04-14', ItemCode: 'P00225', ItemGroup: 'PAPER', SubGroup: 'GREY BOARD', ItemName: 'Grey Board, 1650, Magnum, Coated', POQty: 10000, PurchaseUnit: 'Sheet', ReceiptQty: 10000, ApprQty: 0, HoldQty: 0, RejectQty: 10000, RMQCNo: 'QC02050_26_27', COANo: '', Remark: '', BatchNo: 'BATCH-136-001', SupplierBatchNo: 'MGN-1650', StockUnit: 'Sheet', Warehouse: 'Main Godown', Bin: 'Paper Store' },
   ],
 }
 
